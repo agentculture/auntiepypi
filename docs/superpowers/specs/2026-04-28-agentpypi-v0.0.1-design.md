@@ -1,9 +1,8 @@
 # agentpypi v0.0.1 — design
 
-**Status:** approved 2026-04-28. Tracks
-`/home/spark/.claude/plans/you-have-in-docs-vectorized-parnas.md` (the
-implementation plan); this file is the project-side spec. If they drift,
-the plan file is rebuilt from this one.
+**Status:** approved 2026-04-28. The Claude Code planning harness wrote a
+machine-side plan file outside the repo; this file is the project-side
+spec, committed and authoritative. If they drift, the spec wins.
 
 ## Context
 
