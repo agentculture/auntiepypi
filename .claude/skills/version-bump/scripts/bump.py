@@ -89,7 +89,9 @@ def read_changelog_entries() -> dict:
             return {}
         return json.loads(raw)
     except (json.JSONDecodeError, ValueError):
-        print("WARNING: could not parse changelog JSON from stdin, using empty stub", file=sys.stderr)
+        print(
+            "WARNING: could not parse changelog JSON from stdin, using empty stub", file=sys.stderr
+        )
         return {}
 
 
@@ -163,10 +165,12 @@ def main():
         if init.exists():
             init_text = init.read_text()
             if f'__version__ = "{current}"' in init_text:
-                init.write_text(init_text.replace(
-                    f'__version__ = "{current}"',
-                    f'__version__ = "{new}"',
-                ))
+                init.write_text(
+                    init_text.replace(
+                        f'__version__ = "{current}"',
+                        f'__version__ = "{new}"',
+                    )
+                )
                 print(f"Updated {init.relative_to(path.parent)}")
 
     # Update changelog

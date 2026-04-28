@@ -23,8 +23,8 @@ AgentCulture mesh:
 
 - **Online PyPI** — release orchestration across AgentCulture siblings
   (`afi-cli`, `cfafi`, `ghafi`, `shushu`, `steward`, `zehut`, …). Read PyPI
-  + TestPyPI state, diff against `CHANGELOG.md` / `main`, and trigger the
-  per-sibling `publish.yml` workflow that `ghafi` provisioned.
+  and TestPyPI state, diff against `CHANGELOG.md` / `main`, and trigger
+  the per-sibling `publish.yml` workflow that `ghafi` provisioned.
 - **Local PyPI** — a private PyPI-compatible index running on the Culture
   mesh so agents can publish and pull intra-mesh wheels without leaving the
   org's trust boundary.
@@ -36,9 +36,9 @@ this repo inherits), [`ghafi`](https://github.com/agentculture/ghafi)
 supplier; `steward doctor --scope siblings` will audit this repo against
 the corpus baseline once code lands).
 
-Workspace context: see `../CLAUDE.md` (the multi-project workspace) and
-`/home/spark/.claude/CLAUDE.md` (user globals) when in doubt about
-conventions; do not duplicate them here.
+Workspace context: see `../CLAUDE.md` (the multi-project workspace) for
+cross-project conventions; do not duplicate them here. Per-user globals
+load automatically through the agent harness if present.
 
 ## Sibling pattern this repo MUST adopt
 
