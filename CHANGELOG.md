@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.2] - 2026-04-28
+
+### Changed
+
+- doctor: ok now derived from final post-fix probe statuses (was: start_command return codes only)
+- doctor: extracted `_apply_fix` and `_process_probe` helpers (S3776 cognitive complexity)
+- whoami: switched configparser to interpolation=None (RawConfigParser semantics) so `%` in URL-encoded credentials no longer crashes whoami
+- learn: extracted `_M_ONLINE` / `_M_LOCAL` constants for milestone strings (S1192)
+- _runtime: dropped redundant URLError catch (subclass of OSError) (S5713)
+- tests/test_whoami: switched fake HOME to pytest tmp_path (Copilot review)
+- tests/test_overview: switched bogus target to a tmp_path subpath (S5443)
+- tests/test_doctor: annotated yield fixture as Iterator[None] (S5886)
+
+### Fixed
+
+- doctor --fix exiting 0 even when a server was still down/absent after a successful start_command (Copilot + qodo bug report)
+- README + CLAUDE.md still describing the repo as warm-up despite v0.0.1 landing
+
 ## [0.0.1] - 2026-04-28
 
 ### Added

@@ -15,6 +15,12 @@ import argparse
 from agentpypi import __version__
 from agentpypi.cli._output import emit_result
 
+# Roadmap milestones — kept as constants so `learn`'s `planned` array
+# can never drift out of sync with `agentpypi explain online` /
+# `... explain local`. Update together when a milestone slides.
+_M_ONLINE = "v0.1.0"
+_M_LOCAL = "v0.2.0"
+
 _TEXT = """\
 agentpypi — both ends of the Python distribution pipe for the AgentCulture mesh.
 
@@ -93,11 +99,11 @@ def _as_json_payload() -> dict[str, object]:
             },
         ],
         "planned": [
-            {"path": ["online", "status"], "milestone": "v0.1.0"},
-            {"path": ["online", "release"], "milestone": "v0.1.0"},
-            {"path": ["local", "serve"], "milestone": "v0.2.0"},
-            {"path": ["local", "upload"], "milestone": "v0.2.0"},
-            {"path": ["local", "mirror"], "milestone": "v0.2.0"},
+            {"path": ["online", "status"], "milestone": _M_ONLINE},
+            {"path": ["online", "release"], "milestone": _M_ONLINE},
+            {"path": ["local", "serve"], "milestone": _M_LOCAL},
+            {"path": ["local", "upload"], "milestone": _M_LOCAL},
+            {"path": ["local", "mirror"], "milestone": _M_LOCAL},
         ],
         "exit_codes": {
             "0": "success",

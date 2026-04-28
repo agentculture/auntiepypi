@@ -28,12 +28,18 @@ _DEFAULT_TESTPYPI = "https://test.pypi.org/simple"
 
 
 def _read_pip_conf() -> dict[str, str]:
-    """Return ``{global.index-url, global.extra-index-url, ...}`` from pip.conf, or ``{}``."""
+    """Return ``{global.index-url, global.extra-index-url, ...}`` from pip.conf, or ``{}``.
+
+    ``interpolation=None`` (RawConfigParser semantics) is required because
+    pip.conf URLs commonly contain percent-encoded characters in credentials
+    (e.g. ``%3A`` for ``:``); the default ``BasicInterpolation`` raises
+    ``InterpolationSyntaxError`` on bare ``%``.
+    """
     candidates = [
         Path.home() / ".config" / "pip" / "pip.conf",
         Path.home() / ".pip" / "pip.conf",  # legacy on some distros
     ]
-    parser = configparser.ConfigParser()
+    parser = configparser.ConfigParser(interpolation=None)
     for path in candidates:
         if path.exists():
             try:
@@ -44,8 +50,15 @@ def _read_pip_conf() -> dict[str, str]:
     out: dict[str, str] = {}
     if parser.has_section("global"):
         for key in ("index-url", "extra-index-url"):
-            if parser.has_option("global", key):
-                out[key] = parser.get("global", key)
+            try:
+                if parser.has_option("global", key):
+                    out[key] = parser.get("global", key)
+            except configparser.Error:
+                # Defensive: any residual parser error here (interpolation,
+                # malformed value, encoding) is treated as "value not present"
+                # rather than crashing whoami. The verb is read-only and
+                # advisory; degrading gracefully is the right call.
+                continue
     return out
 
 

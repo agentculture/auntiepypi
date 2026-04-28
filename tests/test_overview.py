@@ -35,9 +35,11 @@ def test_overview_json_shape(capsys: pytest.CaptureFixture[str]) -> None:
 
 def test_overview_graceful_on_unknown_target(
     capsys: pytest.CaptureFixture[str],
+    tmp_path,
 ) -> None:
     """AFI rubric: unknown target -> exit 0, zero-target report, warning."""
-    rc = main(["overview", "/tmp/no-such-path-zzz"])  # noqa: S108
+    bogus = str(tmp_path / "no-such-path-zzz")  # never created; pytest cleans the parent
+    rc = main(["overview", bogus])
     assert rc == 0
     captured = capsys.readouterr()
     assert "warning" in captured.err.lower()
@@ -46,8 +48,10 @@ def test_overview_graceful_on_unknown_target(
 
 def test_overview_graceful_on_unknown_target_json(
     capsys: pytest.CaptureFixture[str],
+    tmp_path,
 ) -> None:
-    rc = main(["overview", "--json", "/tmp/no-such-path-zzz"])  # noqa: S108
+    bogus = str(tmp_path / "no-such-path-zzz")
+    rc = main(["overview", "--json", bogus])
     assert rc == 0
     payload = json.loads(capsys.readouterr().out)
     assert payload["sections"] == []

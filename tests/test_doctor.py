@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import subprocess
-from typing import Callable
+from typing import Callable, Iterator
 
 import pytest
 
@@ -21,7 +21,7 @@ def _restore_runner() -> None:
 
 
 @pytest.fixture(autouse=True)
-def _restore_doctor_runner() -> None:
+def _restore_doctor_runner() -> Iterator[None]:
     yield
     _restore_runner()
 

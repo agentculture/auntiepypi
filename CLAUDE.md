@@ -2,19 +2,20 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Status: warm-up
+## Status: v0.0.1 baseline landed
 
-This repository is a **freshly-initialised AgentCulture sibling**. The only
-checked-in files are `README.md`, `LICENSE`, `.gitignore`, and this file.
-There is no `pyproject.toml`, no package, no tests, and no CI yet.
+This repository is an **AgentCulture sibling with its initial baseline
+in place**. `pyproject.toml`, the `agentpypi/` package, `tests/`, the
+quality pipeline (lint configs + pre-commit + the two CI workflows),
+the vendored skills (`.claude/skills/{version-bump,pr-review}/`), and
+`culture.yaml` are all checked in.
 
-The contract this file captures is the **intended shape** for the first
-implementation PR — not a description of what is on disk today. When you
-edit, keep claims grounded in what is actually checked in: the moment a
+This file describes the repository **as it exists on disk today**. When
+you edit, keep claims grounded in checked-in reality; the moment a
 section drifts ahead of reality, mark it `(planned)` or move it under
 `## Roadmap`.
 
-Remote (planned): `https://github.com/agentculture/agentpypi`.
+Remote: `https://github.com/agentculture/agentpypi`.
 
 ## What this repo is
 
@@ -69,7 +70,7 @@ skills convention, etc.). Run it before opening the first PR:
 (cd ../steward && uv run steward doctor --scope self ../agentpypi)
 ```
 
-## Quality pipeline (planned)
+## Quality pipeline
 
 The dev-extras and pre-commit hook set every AgentCulture sibling ships
 with — copy from `shushu` or `ghafi` rather than re-deriving:
@@ -84,7 +85,7 @@ with — copy from `shushu` or `ghafi` rather than re-deriving:
 `.flake8` carries any per-file ignores (e.g. `tests/*:S101`). Don't broaden
 it to silence real findings — delete or fix the offending code.
 
-## Version discipline (planned)
+## Version discipline
 
 One source of truth: `pyproject.toml` `[project].version`.
 `agentpypi/__init__.py` resolves `__version__` dynamically via
@@ -98,7 +99,7 @@ otherwise.
 `requires-python = ">=3.12"`. PEP 604 unions, frozen dataclasses,
 `tomllib`, `importlib.resources.files`. Do not lower the floor.
 
-## CLI shape (planned)
+## CLI shape
 
 Noun/verb, agent-first, identical in spirit to `afi-cli` / `cfafi` /
 `ghafi` / `shushu`:
@@ -107,38 +108,50 @@ Noun/verb, agent-first, identical in spirit to `afi-cli` / `cfafi` /
 agentpypi <noun> <verb> [args] [--json] [--apply]
 ```
 
-Required verbs (the agent-affordance trio):
+Five flat verbs registered at v0.0.1 (no nouns yet):
 
-- `agentpypi learn` (and `learn --json`) — self-teaching prompt covering
-  every noun and verb, generated from the `explain/` catalog so it can
-  never lie.
-- `agentpypi explain <path>` — markdown for any noun, verb, or concept.
-- `agentpypi whoami` — smallest auth probe; reports which PyPI / TestPyPI
-  / local index the current env is pointed at.
+- `agentpypi learn` (and `learn --json`) — self-teaching prompt
+  generated from the `agentpypi/explain/catalog.py` catalog so it can
+  never describe a verb that isn't registered.
+- `agentpypi explain <path>` — markdown for any noun, verb, or planned
+  concept. `online` and `local` resolve to `status: planned` entries.
+- `agentpypi overview [TARGET] [--json]` — probe localhost for known
+  PyPI server flavors (`devpi:3141`, `pypiserver:8080`); JSON shape is
+  `{"subject", "sections": [...]}`. Read-only. Unknown TARGET → exit 0
+  with a stderr warning + zero-target report (per AFI rubric bundle 6).
+- `agentpypi doctor [--fix] [--json]` — same probes plus diagnoses;
+  with `--fix`, runs each probe's `start_command` and re-probes. Exits
+  `2` only when `--fix` was attempted and any server is still not up
+  after the re-probe.
+- `agentpypi whoami [--json]` — auth/env probe; reads
+  `$PIP_INDEX_URL` / `$UV_INDEX_URL` env vars and pip's global config
+  file, cross-references local probes. Exact paths inspected live in
+  `agentpypi/cli/_commands/whoami.py`.
 
-Two top-level nouns, mirroring the README:
+Two top-level nouns are catalog-known but **not** yet registered as
+argparse subcommands; calling them errors with `invalid choice` until
+the milestone lands:
 
-- `agentpypi online …` — read PyPI / TestPyPI state, diff siblings, trigger
-  the sibling-side `publish.yml`. Mutations require `--apply`.
-- `agentpypi local …` — run / mirror / publish to the in-mesh index.
-  `serve` is foreground-default; everything write-shaped is `--apply`-gated.
+- `agentpypi online …` (v0.1.0) — read PyPI / TestPyPI state, diff
+  siblings, trigger the sibling-side `publish.yml`. Mutations require
+  `--apply`.
+- `agentpypi local …` (v0.2.0) — run / mirror / publish to the in-mesh
+  index. `serve` is foreground-default; everything write-shaped is
+  `--apply`-gated.
 
-The exact verb set is **not yet frozen** — brainstorm before coding.
-Use the `superpowers:brainstorming` skill on the first design PR.
+## Roadmap discipline
 
-## Do not implement yet
+CLI changes follow the same discipline as the rest of the AgentCulture
+mesh: brainstorm with the `superpowers:brainstorming` skill before code,
+write a design doc under `docs/superpowers/specs/`, and bump the version
+on every PR (`version-bump` skill — CI's `version-check` job blocks
+merge otherwise).
 
-This repo is a warm-up. Until Ori asks for an implementation PR:
-
-- Do **not** create `pyproject.toml`, package directories, tests, workflows,
-  or skills.
-- Do **not** add a `culture.yaml` or join the mesh.
-- Do **not** invent verbs, exit-code tables, or threat models that aren't
-  reflected here.
-
-What you *can* do without permission: tighten this file or `README.md` if
-something is wrong, ambiguous, or has drifted from the linked sibling
-patterns.
+The first implementation PR (v0.0.1) brainstormed the noun set and
+shipped flat verbs instead of the `online` / `local` nouns CLAUDE.md
+originally sketched. That decision is captured in
+`docs/superpowers/specs/2026-04-28-agentpypi-v0.0.1-design.md` under
+"Drift acknowledged".
 
 ## Roadmap (high-level, agent-readable)
 

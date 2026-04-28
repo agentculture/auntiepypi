@@ -68,43 +68,52 @@ def _try_start(probe: Probe) -> tuple[bool, str]:
     return True, "started"
 
 
-def _build_payload(*, fix: bool) -> tuple[dict[str, object], bool]:
-    """Return (payload, all_healthy). Mutates state when ``fix`` is True."""
-    items: list[dict[str, object]] = []
-    all_healthy = True
-    fix_failed = False
-    for probe in PROBES:
-        result = probe_status(probe)
-        item = _diagnose(result, probe)
-        if item["status"] != "up":
-            all_healthy = False
-            if fix and probe.start_command:
-                ok, detail = _try_start(probe)
-                item["fix_attempted"] = True
-                item["fix_ok"] = ok
-                item["fix_detail"] = detail
-                if not ok:
-                    fix_failed = True
-                else:
-                    # Re-probe after start_command returned successfully.
-                    rechecked = probe_status(probe)
-                    item["status"] = rechecked["status"]
-                    item["url"] = rechecked["url"]
-                    if rechecked.get("detail"):
-                        item["detail"] = rechecked["detail"]
-                    if rechecked["status"] == "up":
-                        item["diagnosis"] = "fixed"
-            else:
-                item["fix_attempted"] = False
-        items.append(item)
+def _apply_fix(item: dict[str, object], probe: Probe) -> None:
+    """Run ``probe.start_command`` and re-probe, updating ``item`` in place."""
+    ok, detail = _try_start(probe)
+    item["fix_attempted"] = True
+    item["fix_ok"] = ok
+    item["fix_detail"] = detail
+    if not ok:
+        return
+    rechecked = probe_status(probe)
+    item["status"] = rechecked["status"]
+    item["url"] = rechecked["url"]
+    if rechecked.get("detail"):
+        item["detail"] = rechecked["detail"]
+    if rechecked["status"] == "up":
+        item["diagnosis"] = "fixed"
 
+
+def _process_probe(probe: Probe, *, fix: bool) -> dict[str, object]:
+    """Diagnose one probe; under ``--fix``, attempt remediation and re-probe."""
+    item = _diagnose(probe_status(probe), probe)
+    if item["status"] == "up":
+        return item
+    if fix and probe.start_command:
+        _apply_fix(item, probe)
+    else:
+        item["fix_attempted"] = False
+    return item
+
+
+def _build_payload(*, fix: bool) -> tuple[dict[str, object], bool]:
+    """Return (payload, ok). When ``fix`` is True, runs start_commands.
+
+    ``ok`` is computed from the **final post-fix probe statuses**, not from
+    the start_command return codes. This is the contract `learn` /
+    `explain doctor` document: a `--fix` attempt is only successful if the
+    server is `up` after the re-probe.
+    """
+    items = [_process_probe(probe, fix=fix) for probe in PROBES]
     section = {"name": "local-pypi-servers", "summary": _summary(items), "items": items}
     payload = {
         "subject": _SUBJECT,
         "sections": [section],
         "fix_applied": fix,
     }
-    return payload, (all_healthy or (fix and not fix_failed))
+    ok = all(item["status"] == "up" for item in items)
+    return payload, ok
 
 
 def _summary(items: list[dict[str, object]]) -> str:
@@ -147,17 +156,20 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     else:
         emit_result(_render_text(payload), json_mode=False)
 
-    if not ok:
-        # Only `--fix` failures escalate to a non-zero exit. Healthy-but-down
-        # in dry-run is a *report*, not an error: doctor's job is to surface,
-        # not enforce.
-        if fix:
-            emit_diagnostic("doctor: at least one --fix attempt failed")
-            raise AfiError(
-                code=EXIT_ENV_ERROR,
-                message="doctor: a --fix attempt failed",
-                remediation=("inspect the JSON payload's fix_detail field for the failing command"),
-            )
+    if fix and not ok:
+        # `--fix` did not bring every server up (either start_command itself
+        # failed, or it returned 0 but the post-fix re-probe still reports
+        # down/absent). Either case violates the documented contract.
+        # Dry-run never escalates: doctor's job is to surface, not enforce.
+        emit_diagnostic("doctor: at least one server is still not up after --fix")
+        raise AfiError(
+            code=EXIT_ENV_ERROR,
+            message="doctor: --fix did not bring every server up",
+            remediation=(
+                "inspect the JSON payload's fix_detail field (when present) and"
+                " each item's final status to identify the failing server"
+            ),
+        )
     return EXIT_SUCCESS
 
 

@@ -32,6 +32,7 @@ def test_whoami_text(
 def test_whoami_json_default_index(
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
 ) -> None:
     for k in (
         "PIP_INDEX_URL",
@@ -40,9 +41,10 @@ def test_whoami_json_default_index(
         "UV_EXTRA_INDEX_URL",
     ):
         monkeypatch.delenv(k, raising=False)
-    # Pretend pip.conf doesn't exist so the env-only path is exercised.
-    fake_home = str(getattr(monkeypatch, "path", lambda: "/tmp")())  # noqa: S108
-    monkeypatch.setenv("HOME", fake_home)
+    # Point HOME at a guaranteed-empty pytest tmp dir so neither
+    # ~/.config/pip/pip.conf nor ~/.pip/pip.conf can be picked up. This
+    # exercises the env-only resolution path deterministically.
+    monkeypatch.setenv("HOME", str(tmp_path))
     rc = main(["whoami", "--json"])
     assert rc == 0
     payload = json.loads(capsys.readouterr().out)

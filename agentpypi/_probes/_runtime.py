@@ -71,7 +71,12 @@ def probe_status(
             "status": "down",
             "detail": f"http {err.code}",
         }
-    except (urllib.error.URLError, OSError) as err:  # TimeoutError is an OSError subclass
+    except OSError as err:
+        # OSError is the umbrella class here:
+        #   - urllib.error.URLError derives from OSError (covers DNS, refused, …)
+        #   - TimeoutError derives from OSError (covers urllib timeout=…)
+        # Catching just OSError keeps SonarRule python:S5713 happy and is
+        # exactly equivalent to the prior tuple.
         return {
             "name": probe.name,
             "port": p,
