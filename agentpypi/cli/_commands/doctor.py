@@ -1,18 +1,164 @@
-"""``agentpypi doctor`` — placeholder; real implementation lands in step 5."""
+"""``agentpypi doctor`` — probe + diagnose; ``--fix`` starts configured servers.
+
+Default is dry-run: prints which servers would be started, returns the
+overview-style payload but with a ``diagnoses`` field per item. ``--fix``
+runs each ``down``/``absent`` server's ``start_command`` via
+``subprocess.run`` and re-probes.
+
+Mutating verbs default to dry-run (per CLAUDE.md "every write verb defaults
+to dry-run"). ``--fix`` is doctor's apply gate.
+
+Exit codes:
+
+* ``0`` — every server is up (or ``--fix`` brought every down/absent server up).
+* ``2`` — a ``--fix`` attempt failed (start_command not on PATH, non-zero exit, …).
+"""
 
 from __future__ import annotations
 
 import argparse
+import subprocess
+from typing import Callable
 
-from agentpypi.cli._errors import EXIT_ENV_ERROR, AfiError
+from agentpypi._probes import PROBES, probe_status
+from agentpypi._probes._probe import Probe
+from agentpypi._probes._runtime import ProbeResult
+from agentpypi.cli._errors import EXIT_ENV_ERROR, EXIT_SUCCESS, AfiError
+from agentpypi.cli._output import emit_diagnostic, emit_result
+
+_SUBJECT = "agentpypi doctor"
+
+# Indirection for tests: monkey-patch this to a FakeRunner instead of subprocess.run.
+RUN: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run
 
 
-def cmd_doctor(args: argparse.Namespace) -> int:  # pragma: no cover - replaced in step 5
-    raise AfiError(
-        code=EXIT_ENV_ERROR,
-        message="doctor is not yet wired (step 3 placeholder)",
-        remediation="finish step 5 of the v0.0.1 plan",
-    )
+def _diagnose(item: ProbeResult, probe: Probe) -> dict[str, object]:
+    out: dict[str, object] = dict(item)
+    if item["status"] == "up":
+        out["diagnosis"] = "healthy"
+        out["remediation"] = None
+        return out
+    if not probe.start_command:
+        out["diagnosis"] = f"{item['status']}; no start_command configured"
+        out["remediation"] = "configure start_command in the probe definition"
+        return out
+    out["diagnosis"] = f"{item['status']}; would run start_command"
+    out["remediation"] = list(probe.start_command)
+    return out
+
+
+def _try_start(probe: Probe) -> tuple[bool, str]:
+    """Run ``probe.start_command``; return (ok, detail)."""
+    try:
+        completed = RUN(
+            list(probe.start_command),
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    except FileNotFoundError as err:
+        return False, f"command not found: {err.filename}"
+    except (OSError, subprocess.SubprocessError) as err:
+        return False, f"{err.__class__.__name__}: {err}"
+    if completed.returncode != 0:
+        snippet = (completed.stderr or completed.stdout or "").strip().splitlines()
+        msg = snippet[0] if snippet else f"exit {completed.returncode}"
+        return False, f"exit {completed.returncode}: {msg}"
+    return True, "started"
+
+
+def _build_payload(*, fix: bool) -> tuple[dict[str, object], bool]:
+    """Return (payload, all_healthy). Mutates state when ``fix`` is True."""
+    items: list[dict[str, object]] = []
+    all_healthy = True
+    fix_failed = False
+    for probe in PROBES:
+        result = probe_status(probe)
+        item = _diagnose(result, probe)
+        if item["status"] != "up":
+            all_healthy = False
+            if fix and probe.start_command:
+                ok, detail = _try_start(probe)
+                item["fix_attempted"] = True
+                item["fix_ok"] = ok
+                item["fix_detail"] = detail
+                if not ok:
+                    fix_failed = True
+                else:
+                    # Re-probe after start_command returned successfully.
+                    rechecked = probe_status(probe)
+                    item["status"] = rechecked["status"]
+                    item["url"] = rechecked["url"]
+                    if rechecked.get("detail"):
+                        item["detail"] = rechecked["detail"]
+                    if rechecked["status"] == "up":
+                        item["diagnosis"] = "fixed"
+            else:
+                item["fix_attempted"] = False
+        items.append(item)
+
+    section = {"name": "local-pypi-servers", "summary": _summary(items), "items": items}
+    payload = {
+        "subject": _SUBJECT,
+        "sections": [section],
+        "fix_applied": fix,
+    }
+    return payload, (all_healthy or (fix and not fix_failed))
+
+
+def _summary(items: list[dict[str, object]]) -> str:
+    counts: dict[str, int] = {}
+    for item in items:
+        counts[str(item["status"])] = counts.get(str(item["status"]), 0) + 1
+    return ", ".join(f"{n} {s}" for s, n in sorted(counts.items()))
+
+
+def _render_text(payload: dict[str, object]) -> str:
+    lines = [f"# {payload['subject']}"]
+    for section in payload["sections"]:
+        lines.append("")
+        lines.append(f"## {section['name']}")
+        lines.append(f"summary: {section['summary']}")
+        lines.append("")
+        for item in section["items"]:
+            lines.append(f"  {item['name']:<12}  {item['status']:<7}  {item['diagnosis']}")
+            rem = item.get("remediation")
+            if isinstance(rem, list):
+                lines.append(f"      remediation: {' '.join(rem)}")
+            elif isinstance(rem, str):
+                lines.append(f"      remediation: {rem}")
+            if item.get("fix_attempted"):
+                ok = "ok" if item.get("fix_ok") else "FAILED"
+                lines.append(f"      fix: {ok} ({item.get('fix_detail')})")
+    if not payload["fix_applied"]:
+        lines.append("")
+        lines.append("(dry-run; pass --fix to apply remediations)")
+    return "\n".join(lines)
+
+
+def cmd_doctor(args: argparse.Namespace) -> int:
+    fix = bool(getattr(args, "fix", False))
+    json_mode = bool(getattr(args, "json", False))
+    payload, ok = _build_payload(fix=fix)
+
+    if json_mode:
+        emit_result(payload, json_mode=True)
+    else:
+        emit_result(_render_text(payload), json_mode=False)
+
+    if not ok:
+        # Only `--fix` failures escalate to a non-zero exit. Healthy-but-down
+        # in dry-run is a *report*, not an error: doctor's job is to surface,
+        # not enforce.
+        if fix:
+            emit_diagnostic("doctor: at least one --fix attempt failed")
+            raise AfiError(
+                code=EXIT_ENV_ERROR,
+                message="doctor: a --fix attempt failed",
+                remediation=("inspect the JSON payload's fix_detail field for the failing command"),
+            )
+    return EXIT_SUCCESS
 
 
 def register(sub: argparse._SubParsersAction) -> None:
