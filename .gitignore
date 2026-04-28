@@ -216,3 +216,10 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# AgentCulture sibling — per-machine skill config (committed example only)
+.claude/skills.local.yaml
+.claude/settings.local.json
+
+# AFI scaffold — written by `afi cli cite .`, never committed
+.afi/
