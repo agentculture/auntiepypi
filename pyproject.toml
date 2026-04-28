@@ -1,0 +1,79 @@
+[project]
+name = "agentpypi"
+version = "0.0.1"
+description = "agentpypi — both ends of the Python distribution pipe for the AgentCulture mesh."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.12"
+authors = [{name = "AgentCulture"}]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Programming Language :: Python :: 3.12",
+    "License :: OSI Approved :: MIT License",
+    "Topic :: Software Development",
+    "Intended Audience :: Developers",
+]
+dependencies = [
+    # Zero runtime deps at v0.0.1. Stdlib only (argparse, json, tomllib,
+    # urllib.request, socket, subprocess). Add only when a verb needs
+    # something stdlib can't do.
+]
+
+[project.urls]
+Homepage = "https://github.com/agentculture/agentpypi"
+Issues = "https://github.com/agentculture/agentpypi/issues"
+
+[project.scripts]
+agentpypi = "agentpypi.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["agentpypi"]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-xdist>=3.0",
+    "pytest-cov>=4.1",
+    "bandit>=1.7.5",
+    "flake8>=6.1",
+    "flake8-bugbear>=24.0",
+    "flake8-bandit>=4.1",
+    "isort>=5.12.0",
+    "black>=23.7.0",
+    "pylint>=3.0",
+    "pre-commit>=3.6",
+]
+
+[tool.coverage.run]
+source = ["agentpypi"]
+omit = ["agentpypi/__pycache__/*"]
+
+[tool.coverage.report]
+fail_under = 60
+show_missing = true
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.",
+    "if TYPE_CHECKING:",
+]
+
+[tool.isort]
+profile = "black"
+line_length = 100
+known_first_party = ["agentpypi"]
+
+[tool.black]
+line-length = 100
+target-version = ["py312"]
+
+[tool.bandit]
+exclude_dirs = ["tests"]
+skips = ["B101", "B404", "B603"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
