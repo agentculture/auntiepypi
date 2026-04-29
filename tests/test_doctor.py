@@ -109,13 +109,12 @@ def test_diagnose_no_start_command() -> None:
         health_path="/health",
         start_command=(),  # empty tuple is falsy -> "no start_command" branch
     )
-    # NOSONAR S5332 — synthetic test fixture; URL is never dereferenced.
     item: ProbeResult = {
         "name": "testprobe",
         "port": 19999,
-        "url": "http://x",
+        "url": "http://x",  # NOSONAR S5332 - synthetic test fixture; never dereferenced
         "status": "absent",
-    }  # noqa
+    }
     result = _diagnose(item, probe)
     assert "no start_command" in result["diagnosis"]
     assert result["remediation"] == "configure start_command in the probe definition"

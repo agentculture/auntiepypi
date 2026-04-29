@@ -105,8 +105,7 @@ def test_server_target_with_detail_field(monkeypatch, tmp_path, capsys):
     fake_probe = {
         "name": "devpi",
         "port": 3141,
-        # NOSONAR S5332 — synthetic test fixture; URL is never dereferenced.
-        "url": "http://x",  # noqa
+        "url": "http://x",  # NOSONAR S5332 - synthetic test fixture; never dereferenced
         "status": "down",
         "detail": "http 500",
     }
