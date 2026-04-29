@@ -24,6 +24,7 @@ Homepage = "https://github.com/agentculture/auntiepypi"
 Issues = "https://github.com/agentculture/auntiepypi/issues"
 
 [project.scripts]
+auntie = "auntiepypi.cli:main"
 auntiepypi = "auntiepypi.cli:main"
 
 [build-system]

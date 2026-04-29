@@ -96,6 +96,16 @@ def test_explain_unknown_path_json_mode(
     assert err["remediation"]
 
 
+def test_auntie_alias_console_script_registered() -> None:
+    """Both `auntie` and `auntiepypi` are registered to auntiepypi.cli:main."""
+    from importlib.metadata import entry_points
+
+    eps = entry_points(group="console_scripts")
+    names = {ep.name: ep.value for ep in eps}
+    assert names.get("auntie") == "auntiepypi.cli:main"
+    assert names.get("auntiepypi") == "auntiepypi.cli:main"
+
+
 def test_module_main_dispatches() -> None:
     """`python -m auntiepypi --version` should also work."""
     import subprocess
