@@ -48,18 +48,19 @@ This walks every `culture.yaml` in the workspace, regenerates
 into `<target>/docs/steward/steward-suggestions.md` (gated by a marker
 line so any hand-written content there is preserved).
 
-agentpypi's `culture.yaml` lands at v0.0.1 per `../CLAUDE.md` Roadmap.
-Until then, `--scope siblings` simply won't include this repo.
+agentpypi's `culture.yaml` landed at v0.0.1 (see repo root), so
+`--scope siblings` includes this repo today.
 
 ## On `culture.yaml`
 
 `culture.yaml` declares an agent to the Culture mesh; it is **not**
 required for every sibling. Steward itself doesn't have one — it's a
-CLI/tools repo, not a Culture-managed resident agent. agentpypi's
-roadmap (per `../CLAUDE.md`) puts `culture.yaml` at v0.0.1 because
-agentpypi *will* run as a mesh-resident process (the local PyPI index
-listens on the mesh). When you write it, model it after `../daria/culture.yaml`
-or `../shushu/culture.yaml` rather than from scratch.
+CLI/tools repo, not a Culture-managed resident agent. agentpypi shipped
+`culture.yaml` at v0.0.1 because agentpypi *will* run as a
+mesh-resident process (the local PyPI index listens on the mesh, once
+v0.2.0 lands `local serve`). It was modelled after
+`../daria/culture.yaml` and `../shushu/culture.yaml` — keep changes
+aligned with those when the agent shape evolves.
 
 ## On `steward doctor --apply`
 

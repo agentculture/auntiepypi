@@ -19,8 +19,9 @@ when CLAUDE.md or culture.yaml change. The workflow is encapsulated in
 `scripts/workflow.sh` — follow that, not a manual checklist.
 
 Vendored from `../steward/.claude/skills/pr-review/` per
-`docs/skills-setup.md`. Re-sync when steward bumps the script. Adapted
-identifiers only — the workflow shape is identical.
+`docs/skill-sources.md` (provenance ledger + re-sync procedure).
+Re-sync when steward bumps the script. Adapted identifiers only — the
+workflow shape is identical.
 
 ## Prerequisites
 

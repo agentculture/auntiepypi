@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.5] - 2026-04-29
+
+### Added
+
+- docs/maturity-rubric.md — single-page reference for the seven packages-overview signals with green/yellow/red thresholds derived from agentpypi/_rubric/.
+
+### Changed
+
+- docs: refresh after v0.1.x landed — about.md tightens composite overview wording and links to new maturity-rubric.md; onboarding.md becomes historical record; sibling-pattern-pointer.md past-tenses culture.yaml claims; quality-pipeline.md trims CHANGELOG and pre-commit sections to point at vendored skills.
+
 ## [0.1.4] - 2026-04-29
 
 ### Added

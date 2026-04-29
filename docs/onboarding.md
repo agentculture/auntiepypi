@@ -1,102 +1,79 @@
-# Onboarding runbook
+# Onboarding history
 
-Welcome, agentpypi.
+This file used to be a forward-looking runbook for becoming a
+well-formed AgentCulture sibling ("Step 0–5 + Hold"). v0.0.1 (the
+scaffold) and v0.1.0 (the `packages overview` PyPI maturity dashboard
+and composite `overview`) have both shipped, so it's preserved here as
+a historical record of how the repo got from empty to first release.
 
-This folder is your **order-of-operations** for becoming a well-formed
-AgentCulture sibling. The *spec* lives in `../CLAUDE.md` (the twelve required
-artifacts, the CLI shape, the python floor, the do-not-implement-yet line);
-this runbook tells you *how to acquire each piece in the right order*.
+For *current* onboarding to the project, read `../CLAUDE.md` and
+`./about.md`. For the next implementation milestone, see `../CLAUDE.md`
+under "Roadmap".
 
-Read `../CLAUDE.md` first, then come back here. Nothing in this folder
-overrides `CLAUDE.md` — when they disagree, `CLAUDE.md` wins and the doc
-here is wrong (open a fix-up PR).
+## Sequence as it actually happened
 
-The canonical artifact list is intentionally **not** repeated here. See
-`./sibling-pattern-pointer.md` for the pointer to the source of truth in
-`../steward/docs/sibling-pattern.md`.
+### Step 0 — Read the spec ✓
 
-## Sequence
-
-### Step 0 — Read the spec
-
-- Read `../CLAUDE.md` end-to-end. Twelve required artifacts. CLI noun/verb
+- `../CLAUDE.md` end-to-end. Twelve required artifacts. CLI noun/verb
   shape. Python floor (≥3.12). The "do not implement yet" line.
-- Read `../README.md` for the agent-facing pitch and intended verb sketches.
-- Read `./sibling-pattern-pointer.md` to learn how `steward doctor`
-  audits siblings against the canonical pattern.
+- `../README.md` for the agent-facing pitch and intended verb sketches.
+- `./sibling-pattern-pointer.md` for how `steward doctor` audits
+  siblings against the canonical pattern.
 
-### Step 1 — Skills setup
+### Step 1 — Skills setup ✓
 
-Vendor the canonical skills from steward (`version-bump`, `pr-review`).
-Create `.claude/skills.local.yaml.example`. Stand up
-`docs/skill-sources.md` so future re-syncs are deterministic.
+Vendored the canonical skills from steward (`version-bump`,
+`pr-review`). Added `.claude/skills.local.yaml.example`. Stood up
+`docs/skill-sources.md` so future re-syncs are deterministic. The
+re-sync procedure now lives in `./skill-sources.md` and the SKILL.md
+files themselves; the standalone setup walk-through has been retired.
 
-→ See `./skills-setup.md`.
+### Step 2 — AFI scaffold ✓
 
-### Step 2 — AFI scaffold
-
-`afi-cli` is the agent-first CLI scaffolder this repo is built from. Run
-`afi cli cite .`, read the emitted `AGENT.md`, and apply the
-stable-contract / shape-adapt split. This produces the package layout
+`afi-cli` is the agent-first CLI scaffolder this repo is built from.
+Ran `afi cli cite .`, read the emitted `AGENT.md`, and applied the
+stable-contract / shape-adapt split. Produced the package layout
 (`agentpypi/`, `agentpypi/cli/`, `tests/`) that `CLAUDE.md` requires.
 
 → See `./afi-setup.md`.
 
-### Step 3 — Quality pipeline
+### Step 3 — Quality pipeline ✓
 
-Lay down `pyproject.toml`, `.flake8`, `.markdownlint-cli2.yaml`,
-`CHANGELOG.md`, and the two GitHub workflows
-(`tests.yml`, `publish.yml`). Wire **before** the first real PR — the
-`version-check` job blocks merge if the version doesn't move, and the
-TestPyPI publish step needs Trusted Publishing in place.
+Laid down `pyproject.toml`, `.flake8`, `.markdownlint-cli2.yaml`,
+`CHANGELOG.md`, and the two GitHub workflows (`tests.yml`,
+`publish.yml`). Wired before the first real PR — the `version-check`
+job blocks merge if the version doesn't move, and the TestPyPI publish
+step needs Trusted Publishing in place.
 
 → See `./quality-pipeline.md`.
 
-### Step 4 — Diagnose against the corpus
-
-From the steward checkout (sibling-relative path):
+### Step 4 — Diagnose against the corpus ✓
 
 ```bash
 cd ../steward
 uv run steward doctor --scope self ../agentpypi
 ```
 
-Exit 0 with no findings means portability + skills-convention are clean.
-Fix any finding before opening the first PR.
+Exit 0 with no findings means portability + skills-convention are
+clean. The corpus-scoped run (`--scope siblings`) regenerates
+`../steward/docs/perfect-patient.md` and writes per-target feedback to
+`docs/steward/steward-suggestions.md` *inside this repo*. Treat that
+file as advisory — corpus mode never blocks.
 
-Once `culture.yaml` lands (v0.0.1 in the roadmap), also run:
+### Step 5 — First implementation PR ✓
 
-```bash
-uv run steward doctor --scope siblings
-```
+The "do not implement yet" hold ended with the v0.0.1 PR, which
+brainstormed the noun set with `superpowers:brainstorming` before any
+code landed. The brainstorm output is preserved under
+`./superpowers/specs/2026-04-28-agentpypi-v0.0.1-design.md`. v0.1.0
+followed under
+`./superpowers/specs/2026-04-29-agentpypi-packages-overview-design.md`.
 
-This regenerates `../steward/docs/perfect-patient.md` and writes
-per-target feedback to `docs/steward/steward-suggestions.md` *inside this
-repo*. Treat that file as advisory — corpus mode never blocks.
+## Where v0.2.0 starts
 
-### Step 5 — Hold
-
-`CLAUDE.md` says: do **not** invent verbs, exit-code tables, or threat
-models that aren't reflected there yet. The first implementation PR
-brainstorms the noun set with `superpowers:brainstorming` before any
-code lands. This runbook scaffolds the *frame*; Ori signals the
-implementation kick-off.
-
-What you may do without permission: tighten `CLAUDE.md`, `README.md`, or
-any file in this `docs/` folder when you spot drift from the linked
-sibling patterns.
-
-## What "done" looks like for onboarding
-
-- `.claude/skills/version-bump/` and `.claude/skills/pr-review/` exist
-  with `SKILL.md` + `scripts/`.
-- `.claude/skills.local.yaml.example` is committed; `.gitignore` lists
-  `.claude/skills.local.yaml`.
-- `pyproject.toml`, `CHANGELOG.md`, `.flake8`, `.markdownlint-cli2.yaml`
-  exist.
-- `.github/workflows/tests.yml` and `publish.yml` exist.
-- `agentpypi/`, `agentpypi/cli/`, `tests/` exist with the afi scaffold
-  applied.
-- `steward doctor --scope self ../agentpypi` is clean.
-
-After that, wait for kick-off.
+Per `../CLAUDE.md` Roadmap: the `local` noun (in-mesh PyPI index —
+`local serve`, `local upload`, `local mirror PACKAGE`) and the
+`servers` lifecycle noun (start/stop/list/diagnose). Server *probes*
+already ship in `overview`; v0.2.0 adds the write-side. Brainstorm
+first, write a spec under `./superpowers/specs/`, bump the version,
+then code.
