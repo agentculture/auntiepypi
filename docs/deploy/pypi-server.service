@@ -1,0 +1,33 @@
+# systemd-user unit template for pypi-server.
+#
+# Install:
+#   mkdir -p ~/.config/systemd/user
+#   cp pypi-server.service ~/.config/systemd/user/
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now pypi-server.service
+#
+# After install, declare it in pyproject.toml so `auntie overview` finds it:
+#
+#   [[tool.auntiepypi.servers]]
+#   name = "main"
+#   flavor = "pypiserver"
+#   port = 8080
+#   managed_by = "systemd-user"
+#   unit = "pypi-server.service"
+#
+# Ensure your wheel/sdist storage directory exists; the unit below points at
+# ~/pypi-packages by default.
+
+[Unit]
+Description=pypi-server (auntiepypi managed; v0.3.0 will integrate)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/pypi-server run -p 8080 %h/pypi-packages
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

@@ -13,7 +13,7 @@ def test_overview_text_no_args(capsys: pytest.CaptureFixture[str]) -> None:
     assert main(["overview"]) == 0
     out = capsys.readouterr().out
     assert out.strip()
-    assert "# auntiepypi" in out
+    assert "# auntie" in out
     # v0.1.0: servers appear by their probe name (devpi / pypiserver), not
     # as the legacy "local-pypi-servers" aggregate section header.
     assert any(name in out for name in ("devpi", "pypiserver"))
@@ -24,7 +24,7 @@ def test_overview_json_shape(capsys: pytest.CaptureFixture[str]) -> None:
     assert main(["overview", "--json"]) == 0
     payload = json.loads(capsys.readouterr().out)
     assert isinstance(payload, dict)
-    assert payload["subject"] == "auntiepypi"
+    assert payload["subject"] == "auntie"
     assert isinstance(payload["sections"], list)
     # v0.1.0 shape: each section carries category / title / light / fields.
     # [tool.auntiepypi].packages is now configured so the composite emits
@@ -51,7 +51,7 @@ def test_overview_graceful_on_unknown_target(
     assert rc == 0
     captured = capsys.readouterr()
     assert "warning" in captured.err.lower()
-    assert "# auntiepypi" in captured.out
+    assert "# auntie" in captured.out
 
 
 def test_overview_graceful_on_unknown_target_json(

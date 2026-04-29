@@ -1,6 +1,6 @@
 [project]
 name = "auntiepypi"
-version = "0.2.0"
+version = "0.3.0"
 description = "auntiepypi — both ends of the Python distribution pipe for the AgentCulture mesh."
 readme = "README.md"
 license = "MIT"
@@ -24,6 +24,7 @@ Homepage = "https://github.com/agentculture/auntiepypi"
 Issues = "https://github.com/agentculture/auntiepypi/issues"
 
 [project.scripts]
+auntie = "auntiepypi.cli:main"
 auntiepypi = "auntiepypi.cli:main"
 
 [build-system]
