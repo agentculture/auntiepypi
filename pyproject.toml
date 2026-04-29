@@ -81,3 +81,16 @@ addopts = "-ra -m 'not live'"
 markers = [
     "live: opt-in tests that hit pypi.org / pypistats.org over the network",
 ]
+
+[tool.agentpypi]
+# Packages this repo cares about for `agentpypi packages overview`.
+# These are AgentCulture siblings published to pypi.org. Add or remove as
+# the mesh evolves.
+packages = [
+    "agentpypi",
+    "afi-cli",
+    "shushu",
+    "ghafi",
+    "steward",
+    "cfafi",
+]

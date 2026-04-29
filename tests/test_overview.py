@@ -27,15 +27,17 @@ def test_overview_json_shape(capsys: pytest.CaptureFixture[str]) -> None:
     assert payload["subject"] == "agentpypi overview"
     assert isinstance(payload["sections"], list)
     # v0.1.0 shape: each section carries category / title / light / fields.
-    # No [tool.agentpypi].packages in agentpypi's own pyproject.toml yet,
-    # so only servers sections are emitted here.
+    # [tool.agentpypi].packages is now configured so the composite emits
+    # packages sections first, followed by servers sections.
     assert len(payload["sections"]) >= 1
-    section = payload["sections"][0]
-    assert section["category"] == "servers"
-    assert "title" in section
-    assert "light" in section
-    assert "fields" in section
-    field_names = {f["name"] for f in section["fields"]}
+    categories = {s["category"] for s in payload["sections"]}
+    assert "servers" in categories
+    # Spot-check a servers section for the expected field shape.
+    server_section = next(s for s in payload["sections"] if s["category"] == "servers")
+    assert "title" in server_section
+    assert "light" in server_section
+    assert "fields" in server_section
+    field_names = {f["name"] for f in server_section["fields"]}
     assert {"port", "url", "status"} <= field_names
 
 
