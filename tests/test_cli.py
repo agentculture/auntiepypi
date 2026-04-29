@@ -36,16 +36,15 @@ def test_learn_exits_zero(capsys: pytest.CaptureFixture[str]) -> None:
 def test_learn_json_parseable(capsys: pytest.CaptureFixture[str]) -> None:
     assert main(["learn", "--json"]) == 0
     payload = json.loads(capsys.readouterr().out)
-    assert payload["tool"] == "auntiepypi"
+    assert payload["tool"] == "auntie"
+    assert payload["package"] == "auntiepypi"
     assert payload["version"] == __version__
     assert payload["json_support"] is True
     assert payload["exit_codes"]["0"] == "success"
     paths = {tuple(c["path"]) for c in payload["commands"]}
     assert {("learn",), ("explain",), ("overview",), ("doctor",), ("whoami",)} <= paths
-    planned = {tuple(p["path"]) for p in payload["planned"]}
-    # online was promoted / removed; local stays in planned.
-    assert ("online", "status") not in planned
-    assert ("local", "serve") in planned
+    # v0.2.0: `planned` is empty — `local` noun dropped, `servers` not added.
+    assert payload["planned"] == []
 
 
 def test_explain_self(capsys: pytest.CaptureFixture[str]) -> None:
@@ -66,13 +65,14 @@ def test_explain_each_registered_verb(capsys: pytest.CaptureFixture[str]) -> Non
         assert verb in out.lower()
 
 
-def test_explain_planned_nouns(capsys: pytest.CaptureFixture[str]) -> None:
-    # `local` stays in the catalog as a planned noun; `online` was removed.
-    for noun in ("local",):
-        capsys.readouterr()
-        assert main(["explain", noun]) == 0
-        out = capsys.readouterr().out
-        assert "planned" in out.lower()
+def test_explain_local_is_no_longer_in_catalog(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """v0.2.0: `local` noun was permanently dropped, not just unregistered."""
+    rc = main(["explain", "local"])
+    assert rc != 0
+    err = capsys.readouterr().err
+    assert "no explain entry" in err
 
 
 def test_explain_unknown_path_fails_with_hint(
@@ -112,7 +112,7 @@ def test_module_main_dispatches() -> None:
 
 
 def test_unknown_top_level_verb_fails(capsys: pytest.CaptureFixture[str]) -> None:
-    """`auntiepypi online ...` is neither in the catalog nor registered, so argparse rejects it."""
+    """`auntie online ...` is neither in the catalog nor registered, so argparse rejects it."""
     with pytest.raises(SystemExit) as exc:
         main(["online", "status", "shushu"])
     assert exc.value.code != 0
@@ -155,7 +155,22 @@ def test_catalog_root_mentions_packages_overview():
     from auntiepypi.explain.catalog import ENTRIES
 
     root = ENTRIES[("auntiepypi",)]
-    assert "auntiepypi packages overview" in root
+    assert "auntie packages overview" in root
+
+
+def test_catalog_drops_local_noun():
+    """v0.2.0: `local` is permanently removed from the catalog."""
+    from auntiepypi.explain.catalog import ENTRIES
+
+    assert ("local",) not in ENTRIES
+    assert ("local", "serve") not in ENTRIES
+
+
+def test_catalog_supports_auntie_alias():
+    """The new `auntie` name resolves to the same root entry as `auntiepypi`."""
+    from auntiepypi.explain.catalog import ENTRIES
+
+    assert ENTRIES[("auntie",)] == ENTRIES[("auntiepypi",)]
 
 
 def test_learn_json_drops_online_adds_packages():
@@ -171,7 +186,5 @@ def test_learn_json_drops_online_adds_packages():
     payload = json.loads(buf.getvalue())
     paths = [tuple(c["path"]) for c in payload["commands"]]
     assert ("packages", "overview") in paths
-    planned = [tuple(p["path"]) for p in payload["planned"]]
-    assert ("online", "status") not in planned
-    assert ("online", "release") not in planned
-    assert ("local", "serve") in planned  # local stays
+    # planned is empty in v0.2.0
+    assert payload["planned"] == []

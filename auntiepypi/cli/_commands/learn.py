@@ -1,6 +1,6 @@
-"""``auntiepypi learn`` — the learnability affordance (shape-adapt).
+"""``auntie learn`` — the learnability affordance (shape-adapt).
 
-Self-teaching prompt for an agent that wants to use auntiepypi. Generated
+Self-teaching prompt for an agent that wants to use auntie. Generated
 from the same explain catalog so it can never describe a command that
 isn't registered.
 
@@ -15,47 +15,51 @@ import argparse
 from auntiepypi import __version__
 from auntiepypi.cli._output import emit_result
 
-# Roadmap milestones — kept as constants so `learn`'s `planned` array
-# can never drift out of sync with `auntiepypi explain local`.
-# Update together when a milestone slides.
-_M_LOCAL = "v0.2.0"
-_M_SERVERS = "v0.2.0"
-
 _TEXT = """\
-auntiepypi — CLI and agent for managing PyPI packages across the AgentCulture mesh.
+auntie — CLI and agent for managing PyPI packages across the AgentCulture mesh.
 
 Purpose
 -------
-auntiepypi is both a CLI and an agent that maintains, uses, and serves the
-CLI for managing PyPI packages. It supports remote (pypi.org) today and
-local (mesh-hosted) indexes in future milestones. It overviews packages —
-informational, not gating.
+auntie is both a CLI and an agent that maintains, uses, and serves the
+CLI for managing PyPI packages. It surfaces remote (pypi.org) package
+data and a detect-only view of locally running PyPI servers. It overviews
+packages and servers — informational, not gating.
 
 Commands
 --------
-  auntiepypi learn              Print this self-teaching prompt. Supports --json.
-  auntiepypi explain <path>...  Print markdown docs for any noun/verb path.
+  auntie learn                 Print this self-teaching prompt. Supports --json.
+  auntie explain <path>...     Print markdown docs for any noun/verb path.
                                Supports --json.
-  auntiepypi overview [TARGET]  Composite: packages dashboard + local server
-                               probes. With TARGET, drills into one server
-                               flavor or one configured package.
-                               Read-only. Supports --json.
-  auntiepypi packages overview [PKG]  Read-only PyPI maturity dashboard or
+  auntie overview [TARGET]     Composite: packages dashboard + detected
+                               local servers. With TARGET, drills into one
+                               detection name, bare flavor alias, or
+                               configured package. --proc opts into a
+                               /proc-based scan (Linux). Read-only.
+                               Supports --json.
+  auntie packages overview [PKG]
+                               Read-only PyPI maturity dashboard or
                                per-package deep-dive. Informational,
                                not gating. Supports --json.
-  auntiepypi doctor [--fix]     Same probes plus diagnoses; with --fix, start
-                               configured servers. Default is dry-run.
-                               Supports --json.
-  auntiepypi whoami             Auth/env probe — which PyPI / TestPyPI /
-                               local index is the active environment pointing
-                               at? Supports --json.
+  auntie doctor [--fix]        Same probes as v0.0.1 plus diagnoses; with
+                               --fix, start configured servers. Default
+                               is dry-run. Supports --json.
+  auntie whoami                Auth/env probe — which PyPI / TestPyPI /
+                               local index is the active environment
+                               pointing at? Supports --json.
 
-Planned (not yet registered)
-----------------------------
-  auntiepypi local serve | upload | mirror (v0.2.0)
-  auntiepypi servers overview              (v0.2.0)
+Configuration
+-------------
+  pyproject.toml [tool.auntiepypi]
+    packages = [...]                      # for `auntie packages overview`
+    scan_processes = false                # opt into /proc scan; same as --proc
 
-Use `auntiepypi explain local` to read the roadmap entry for the local noun.
+  pyproject.toml [[tool.auntiepypi.servers]]   # one block per server
+    name = "main"
+    flavor = "pypiserver"                 # | "devpi" | "unknown"
+    port = 8080
+
+The CLI registers two console scripts: `auntie` (preferred) and
+`auntiepypi` (alias).
 
 Machine-readable output
 -----------------------
@@ -72,24 +76,29 @@ Exit-code policy
 
 More detail
 -----------
-  auntiepypi explain auntiepypi
+  auntie explain auntiepypi
 """
 
 
 def _as_json_payload() -> dict[str, object]:
     return {
-        "tool": "auntiepypi",
+        "tool": "auntie",
+        "package": "auntiepypi",
         "version": __version__,
         "purpose": (
-            "CLI and agent for managing PyPI packages; supports remote (pypi.org) today "
-            "and local (mesh-hosted) indexes in future milestones."
+            "CLI and agent for managing PyPI packages; surfaces remote (pypi.org) "
+            "package data and a detect-only view of locally running PyPI servers."
         ),
         "commands": [
             {"path": ["learn"], "summary": "Self-teaching prompt."},
             {"path": ["explain"], "summary": "Markdown docs by path."},
             {
                 "path": ["overview"],
-                "summary": "Composite: packages dashboard + local server probes.",
+                "summary": (
+                    "Composite: packages dashboard + detected servers. "
+                    "TARGET drills into one detection, flavor, or package. "
+                    "--proc opts into /proc scan."
+                ),
             },
             {
                 "path": ["packages", "overview"],
@@ -97,26 +106,21 @@ def _as_json_payload() -> dict[str, object]:
             },
             {
                 "path": ["doctor"],
-                "summary": ("Probe + diagnose local PyPI servers; with --fix, start them."),
+                "summary": "Probe + diagnose local PyPI servers; with --fix, start them.",
             },
             {
                 "path": ["whoami"],
                 "summary": "Report configured PyPI / TestPyPI / local index.",
             },
         ],
-        "planned": [
-            {"path": ["local", "serve"], "milestone": _M_LOCAL},
-            {"path": ["local", "upload"], "milestone": _M_LOCAL},
-            {"path": ["local", "mirror"], "milestone": _M_LOCAL},
-            {"path": ["servers", "overview"], "milestone": _M_SERVERS},
-        ],
+        "planned": [],
         "exit_codes": {
             "0": "success",
             "1": "user-input error",
             "2": "environment/setup error",
         },
         "json_support": True,
-        "explain_pointer": "auntiepypi explain <path>",
+        "explain_pointer": "auntie explain <path>",
     }
 
 

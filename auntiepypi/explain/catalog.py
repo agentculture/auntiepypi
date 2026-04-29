@@ -1,7 +1,8 @@
-"""Markdown catalog for ``auntiepypi explain <path>``.
+"""Markdown catalog for ``auntie explain <path>``.
 
 Each entry is verbatim markdown. Keys are command-path tuples. The empty
-tuple and ``("auntiepypi",)`` both resolve to the root entry.
+tuple, ``("auntiepypi",)``, and ``("auntie",)`` all resolve to the root
+entry.
 
 Keep bodies self-contained: an agent reading one entry should get enough
 context without chaining reads.
@@ -10,29 +11,32 @@ context without chaining reads.
 from __future__ import annotations
 
 _ROOT = """\
-# auntiepypi
+# auntie
 
-auntiepypi is both a CLI and an agent that maintains, uses, and serves
-the CLI for managing PyPI packages. It supports remote (pypi.org) today
-and local (mesh-hosted) indexes in future milestones. It overviews
-packages — informational, not gating.
+auntie (Python distribution: `auntiepypi`) is both a CLI and an agent
+that maintains, uses, and serves the CLI for managing PyPI packages. It
+overviews packages on pypi.org and detects PyPI-flavored servers running
+locally. Informational, not gating.
 
 ## Verbs
 
-- `auntiepypi learn` — structured self-teaching prompt.
-- `auntiepypi explain <path>` — markdown docs for any noun/verb.
-- `auntiepypi overview [TARGET]` — composite: packages dashboard + local
-  server probes. With TARGET, drills into one server flavor or one
-  configured package.
-- `auntiepypi packages overview [PKG]` — read-only PyPI maturity dashboard
+- `auntie learn` — structured self-teaching prompt.
+- `auntie explain <path>` — markdown docs for any noun/verb.
+- `auntie overview [TARGET]` — composite: packages dashboard + detected
+  local servers. With TARGET, drills into a detection name, bare flavor
+  alias (`devpi` / `pypiserver`), or configured package. `--proc` opts
+  into a /proc scan (Linux only).
+- `auntie packages overview [PKG]` — read-only PyPI maturity dashboard
   (no arg) or per-package deep-dive (with arg).
-- `auntiepypi doctor [--fix]` — probe + diagnose; `--fix` starts servers.
-- `auntiepypi whoami` — auth/env probe; reports configured indexes.
+- `auntie doctor [--fix]` — probe + diagnose; `--fix` starts servers.
+- `auntie whoami` — auth/env probe; reports configured indexes.
 
-## Planned
+## Console scripts
 
-- `auntiepypi local serve | upload | mirror` — v0.2.0
-- `auntiepypi servers …` — v0.2.0 (formal home for server lifecycle)
+The package installs two scripts that point at the same entry point:
+
+- `auntie` — preferred.
+- `auntiepypi` — alias kept for backward compatibility.
 
 ## Exit-code policy
 
@@ -43,90 +47,115 @@ packages — informational, not gating.
 
 ## See also
 
-- `auntiepypi explain learn`
-- `auntiepypi explain explain`
-- `auntiepypi explain overview`
-- `auntiepypi explain packages`
-- `auntiepypi explain packages overview`
-- `auntiepypi explain doctor`
-- `auntiepypi explain whoami`
-- `auntiepypi explain local`
+- `auntie explain learn`
+- `auntie explain explain`
+- `auntie explain overview`
+- `auntie explain packages`
+- `auntie explain packages overview`
+- `auntie explain doctor`
+- `auntie explain whoami`
 """
 
 _LEARN = """\
-# auntiepypi learn
+# auntie learn
 
-Prints a structured self-teaching prompt covering auntiepypi's purpose,
+Prints a structured self-teaching prompt covering auntie's purpose,
 command map, exit-code policy, `--json` support, and `explain` pointer.
 
 ## Usage
 
-    auntiepypi learn
-    auntiepypi learn --json
+    auntie learn
+    auntie learn --json
 
-The JSON payload includes a `planned` array enumerating verbs that are
-catalog-known but not yet registered as argparse subcommands. An agent
-consuming `learn --json` can therefore reason about the roadmap without
-chasing a separate doc.
+The JSON payload's `planned` array is empty in v0.2.0+: no nouns or
+verbs are catalog-known but unregistered. Future milestones repopulate
+it as new work lands.
 """
 
 _EXPLAIN = """\
-# auntiepypi explain <path>
+# auntie explain <path>
 
 Prints markdown documentation for any noun/verb path. Unlike `--help`
 (terse, positional), `explain` is global and addressable by path.
 
 ## Usage
 
-    auntiepypi explain auntiepypi
-    auntiepypi explain learn
-    auntiepypi explain overview
-    auntiepypi explain --json overview
+    auntie explain auntiepypi
+    auntie explain learn
+    auntie explain overview
+    auntie explain --json overview
 
 Unknown paths exit `1` with `error: no explain entry for: <path>` and a
 `hint:` line listing the discovery command.
 """
 
 _OVERVIEW = """\
-# auntiepypi overview
+# auntie overview
 
 Composite report. With no arg: emits a packages dashboard (one section
-per configured package) plus the local PyPI server probes (one section
-per known flavor). With an arg, drills into one server flavor or one
-configured package, in that priority.
+per configured package) plus the detected-servers report (one section
+per declared server, default-port find, and — when `--proc` is on —
+each /proc-discovered process). With an arg, drills into one detection,
+bare flavor alias, or configured package, in that priority.
 
-Recognised server flavors:
+## Detection sources
 
-- `devpi` on port `3141` (`/+api`)
-- `pypiserver` on port `8080` (`/`)
+- **Declared inventory** — `[[tool.auntiepypi.servers]]` in pyproject.toml.
+  Probes each declared host:port; carries `managed_by` / `unit` /
+  `dockerfile` / etc. through to the JSON envelope (reserved for v0.3.0
+  lifecycle work).
+- **Default port scan** — probes `127.0.0.1:3141` (devpi) and
+  `127.0.0.1:8080` (pypiserver), skipping any (host, port) already
+  covered by declarations. When declarations exist, `absent` results
+  from the scan are suppressed (so a declared-only user doesn't see
+  noisy `pypiserver:8080 absent` rows when their server is on 8081).
+- **`/proc` scan** — opt-in via `--proc` (CLI) or
+  `[tool.auntiepypi].scan_processes = true` (config). Linux-only;
+  no-op elsewhere. Enriches existing detections with PIDs; appends
+  proc-only finds.
 
-Read-only — no mutation flags. Use `auntiepypi doctor --fix` to start
-servers.
+## Target resolution priority
+
+1. Exact detection name (declared `name` or auto-name `<flavor>:<port>`).
+2. Bare flavor alias (`pypiserver` / `devpi` -> first detection of that
+   flavor).
+3. Configured package name.
+4. Zero-target report (stderr warning + exit 0).
 
 ## Usage
 
-    auntiepypi overview
-    auntiepypi overview --json
-    auntiepypi overview <server-flavor>      # e.g. `devpi`
-    auntiepypi overview <configured-pkg>     # e.g. `requests`
+    auntie overview
+    auntie overview --json
+    auntie overview --proc
+    auntie overview <detection-name>          # e.g. `main` or `pypiserver:8080`
+    auntie overview <flavor>                  # e.g. `pypiserver`
+    auntie overview <configured-pkg>          # e.g. `requests`
 
 ## JSON envelope
 
     {
-      "subject": "auntiepypi",
+      "subject": "auntie",
       "sections": [
-        {"category": "packages", "title": "<pkg>", "light": "green|...", "fields": [...]},
-        {"category": "servers",  "title": "<flavor>", "light": "...", "fields": [...]}
+        {"category": "packages", "title": "<pkg>", "light": "...", "fields": [...]},
+        {"category": "servers",  "title": "<name>", "light": "...", "fields": [...]}
       ]
     }
 
+## Remediation for `status: absent`
+
+See `docs/deploy/` for systemd-user unit templates that run pypiserver /
+devpi as background services. `auntie` does not start servers itself
+(see `auntie doctor --fix` for the existing raise capability).
+
 ## Exit codes
 
-- `0` always.
+- `0` always (read-only; reds do not change the exit).
+- `1` malformed `[[tool.auntiepypi.servers]]`.
+- `2` only if every detector failed to run.
 """
 
 _DOCTOR = """\
-# auntiepypi doctor
+# auntie doctor
 
 Same probes as `overview`, plus per-server diagnoses (`port in use`,
 `unexpected response`, `server not installed`). Default is dry-run: prints
@@ -135,10 +164,10 @@ configured `start_command`.
 
 ## Usage
 
-    auntiepypi doctor                # dry-run; no mutations
-    auntiepypi doctor --fix          # start any server reporting `down`
-    auntiepypi doctor --json
-    auntiepypi doctor --fix --json
+    auntie doctor                # dry-run; no mutations
+    auntie doctor --fix          # start any server reporting `down`
+    auntie doctor --json
+    auntie doctor --fix --json
 
 ## Exit codes
 
@@ -147,7 +176,7 @@ configured `start_command`.
 """
 
 _WHOAMI = """\
-# auntiepypi whoami
+# auntie whoami
 
 Auth / environment probe. Reports which PyPI, TestPyPI, and local index
 the current shell environment is pointing at. Cross-references the same
@@ -164,14 +193,14 @@ probe machinery `overview` uses to flag local indexes that are
 
 ## Usage
 
-    auntiepypi whoami
-    auntiepypi whoami --json
+    auntie whoami
+    auntie whoami --json
 
 Read-only.
 """
 
 _PACKAGES = """\
-# auntiepypi packages
+# auntie packages
 
 Read-only verbs against PyPI for the configured set of packages.
 
@@ -182,25 +211,25 @@ The configured set lives in `pyproject.toml`:
 
 ## Verbs
 
-- `auntiepypi packages overview` — dashboard over all configured packages.
-- `auntiepypi packages overview <pkg>` — deep-dive over the rubric for one.
+- `auntie packages overview` — dashboard over all configured packages.
+- `auntie packages overview <pkg>` — deep-dive over the rubric for one.
 
 Read-only by design. Reports — never gates. Exit code is `0` regardless
 of how many packages roll up `red`.
 """
 
 _PACKAGES_OVERVIEW = """\
-# auntiepypi packages overview
+# auntie packages overview
 
 Roll-up dashboard over the configured package list, or per-package
 deep-dive when called with an argument.
 
 ## Usage
 
-    auntiepypi packages overview            # dashboard
-    auntiepypi packages overview <pkg>      # deep-dive
-    auntiepypi packages overview --json
-    auntiepypi packages overview <pkg> --json
+    auntie packages overview            # dashboard
+    auntie packages overview <pkg>      # deep-dive
+    auntie packages overview --json
+    auntie packages overview <pkg> --json
 
 ## Rubric (deep-dive)
 
@@ -222,32 +251,11 @@ to a green / yellow / red / unknown traffic light:
 - `2` only if every fetch failed.
 """
 
-_LOCAL = """\
-# auntiepypi local (planned, v0.2.0)
-
-Run / mirror / publish to an in-mesh PyPI index so AgentCulture agents can
-exchange wheels without leaving the org's trust boundary.
-
-This noun is **not yet registered**. v0.1.0 ships `overview`, `doctor`,
-and `packages overview` — the first two probe localhost for PyPI server
-flavors; the third reports on remote PyPI packages. None of them manage
-a local index yet.
-
-## Planned verbs
-
-- `auntiepypi local serve` — foreground PEP 503 simple index.
-- `auntiepypi local upload PATH [--apply]` — publish a wheel/sdist.
-- `auntiepypi local mirror PACKAGE [--apply]` — snapshot a public package.
-- `auntiepypi local list` — show locally hosted distributions.
-
-Track at https://github.com/agentculture/auntiepypi/milestones — milestone
-v0.2.0.
-"""
-
 
 ENTRIES: dict[tuple[str, ...], str] = {
     (): _ROOT,
     ("auntiepypi",): _ROOT,
+    ("auntie",): _ROOT,
     ("learn",): _LEARN,
     ("explain",): _EXPLAIN,
     ("overview",): _OVERVIEW,
@@ -255,5 +263,4 @@ ENTRIES: dict[tuple[str, ...], str] = {
     ("whoami",): _WHOAMI,
     ("packages",): _PACKAGES,
     ("packages", "overview"): _PACKAGES_OVERVIEW,
-    ("local",): _LOCAL,
 }
