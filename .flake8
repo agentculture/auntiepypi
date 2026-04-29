@@ -1,0 +1,18 @@
+[flake8]
+# Match black's line length so flake8 and black agree.
+max-line-length = 100
+
+# E203: whitespace before ':' — conflicts with black's slice formatting.
+# W503: line break before binary operator — black does the opposite (W504-style).
+# S404, S603: subprocess use is intentional (doctor verb starts PyPI servers
+#   when --fix is set). Mirrored by `[tool.bandit] skips = ["B404", "B603"]`
+#   in pyproject.toml — keep both lists in sync.
+extend-ignore = E203, W503, S404, S603
+
+# Per-file ignores. Keep narrow; do not broaden to silence real findings.
+# tests/*:
+#   S101 — pytest tests are asserts by convention; flake8-bandit warns on assert.
+#   S404 — `import subprocess` is a tool of the trade for invoking the CLI under test.
+#   S603 — `subprocess.run([sys.executable, "-m", ...])` is fully trusted input.
+per-file-ignores =
+    tests/*:S101,S404,S603
