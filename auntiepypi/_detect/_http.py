@@ -31,6 +31,23 @@ class ProbeOutcome:
     error: str | None  # populated on connection error or HTTP timeout
 
 
+def content_type(outcome: "ProbeOutcome") -> str | None:
+    """Infer Content-Type from the first byte of the response body.
+
+    Returns ``"application/json"`` when the body starts with ``{``,
+    ``"text/html"`` when it starts with ``<``, and ``None`` otherwise
+    (including when *outcome.body* is ``None``).
+    """
+    if outcome.body is None:
+        return None
+    head = outcome.body.lstrip()[:1]
+    if head == b"{":
+        return "application/json"
+    if head == b"<":
+        return "text/html"
+    return None
+
+
 def _tcp_open(host: str, port: int, timeout: float) -> bool:
     try:
         with socket.create_connection((host, port), timeout=timeout):

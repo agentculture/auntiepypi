@@ -15,7 +15,7 @@ from typing import Iterable
 
 from auntiepypi._detect._config import ServerSpec
 from auntiepypi._detect._detection import Detection
-from auntiepypi._detect._http import ProbeOutcome, probe_endpoint
+from auntiepypi._detect._http import ProbeOutcome, content_type, probe_endpoint
 
 DEFAULT_PORTS: tuple[int, ...] = (3141, 8080)
 # Conventional flavor for each default port — used as the *expected* flavor when
@@ -46,17 +46,6 @@ def fingerprint_flavor(body: bytes | None, content_type: str | None) -> str:
     return "unknown"
 
 
-def _content_type(outcome: ProbeOutcome) -> str | None:
-    if outcome.body is None:
-        return None
-    head = outcome.body.lstrip()[:1]
-    if head == b"{":
-        return "application/json"
-    if head == b"<":
-        return "text/html"
-    return None
-
-
 def _detection_for(host: str, port: int, outcome: ProbeOutcome) -> Detection:
     if not outcome.tcp_open:
         expected = _PORT_FLAVOR.get(port, "unknown")
@@ -69,7 +58,7 @@ def _detection_for(host: str, port: int, outcome: ProbeOutcome) -> Detection:
             status="absent",
             source="port",
         )
-    flavor = fingerprint_flavor(outcome.body, _content_type(outcome))
+    flavor = fingerprint_flavor(outcome.body, content_type(outcome))
     if outcome.http_status is None:
         return Detection(
             name=f"{flavor}:{port}",

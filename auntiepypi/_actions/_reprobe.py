@@ -14,7 +14,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from auntiepypi._detect._detection import Detection
-from auntiepypi._detect._http import ProbeOutcome, probe_endpoint
+from auntiepypi._detect._http import content_type, probe_endpoint
 from auntiepypi._detect._port import fingerprint_flavor
 
 # Relative offsets from the start of ``probe()`` at which attempts are made.
@@ -28,18 +28,6 @@ class ReprobeResult:
 
     status: str  # "up" | "down" | "absent"
     detail: str | None = None
-
-
-def _content_type(outcome: ProbeOutcome) -> str | None:
-    """Infer Content-Type from the first byte of the body (mirrors _declared)."""
-    if outcome.body is None:
-        return None
-    head = outcome.body.lstrip()[:1]
-    if head == b"{":
-        return "application/json"
-    if head == b"<":
-        return "text/html"
-    return None
 
 
 def _attempt(detection: Detection) -> ReprobeResult:
@@ -57,7 +45,7 @@ def _attempt(detection: Detection) -> ReprobeResult:
 
     # 2xx — verify flavor unless declared flavor is "unknown"
     if detection.flavor != "unknown":
-        observed = fingerprint_flavor(outcome.body, _content_type(outcome))
+        observed = fingerprint_flavor(outcome.body, content_type(outcome))
         if observed != detection.flavor and observed != "unknown":
             return ReprobeResult(
                 status="down",
