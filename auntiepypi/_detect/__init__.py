@@ -15,6 +15,18 @@ Public surface:
 
 from __future__ import annotations
 
+from auntiepypi._detect._config import (
+    ServerConfigError,
+    ServerSpec,
+    ServersConfig,
+    load_servers,
+)
 from auntiepypi._detect._detection import Detection
 
-__all__ = ["Detection"]
+__all__ = [
+    "Detection",
+    "ServerConfigError",
+    "ServerSpec",
+    "ServersConfig",
+    "load_servers",
+]
