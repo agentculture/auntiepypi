@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import subprocess
 from datetime import datetime, timezone
+from pathlib import Path
 
 from auntiepypi._actions._action import ActionResult
 from auntiepypi._actions._logs import path_for
@@ -46,6 +47,7 @@ def apply(detection: Detection, declaration: ServerSpec) -> ActionResult:
                     stdout=logf,
                     stderr=subprocess.STDOUT,
                     stdin=subprocess.DEVNULL,
+                    cwd=str(Path.cwd()),
                 )
             except FileNotFoundError as err:
                 return ActionResult(

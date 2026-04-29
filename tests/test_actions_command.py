@@ -112,3 +112,37 @@ def test_command_log_path_uses_xdg(tmp_path, monkeypatch):
     assert result.log_path is not None
     assert str(tmp_path) in result.log_path
     assert Path(result.log_path).read_bytes()  # non-empty
+
+
+def test_command_not_configured_returns_error(tmp_path, monkeypatch):
+    """`apply` returns ok=False when declaration.command is None/empty (defensive guard).
+
+    Upstream config validation (`_detect/_config.py`, T9) prevents this in
+    practice, but `apply()` is a public function with its own contract.
+    """
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path))
+    spec = ServerSpec(
+        name="empty",
+        flavor="pypiserver",
+        host="127.0.0.1",
+        port=_free_port(),
+        managed_by="command",
+        command=None,
+    )
+    result = apply(_detection(spec.port), spec)
+    assert result.ok is False
+    assert "command" in result.detail and "not set" in result.detail
+
+
+def test_command_permission_denied(tmp_path, monkeypatch):
+    """A non-executable file as argv[0] should raise PermissionError → mapped to ok=False."""
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path))
+    # Create a file with no execute bit
+    fake_bin = tmp_path / "no_exec_bit"
+    fake_bin.write_text("#!/usr/bin/env true\n")
+    fake_bin.chmod(0o644)  # readable but not executable
+    port = _free_port()
+    spec = _spec("noperm", port, (str(fake_bin),))
+    result = apply(_detection(port), spec)
+    assert result.ok is False
+    assert "permission denied" in result.detail.lower()
