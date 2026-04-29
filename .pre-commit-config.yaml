@@ -1,4 +1,4 @@
-# Pre-commit hooks for agentpypi.
+# Pre-commit hooks for auntiepypi.
 #
 # Mirrors the lint chain in .github/workflows/tests.yml so locally-clean
 # work doesn't fail in CI. Modeled on ../afi-cli/.pre-commit-config.yaml

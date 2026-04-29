@@ -1,4 +1,4 @@
-"""Shared fixtures for agentpypi tests.
+"""Shared fixtures for auntiepypi tests.
 
 Provides an in-process HTTP server fixture so probe tests don't depend on
 any external port/process. Stdlib only — no aiohttp/Flask/etc.

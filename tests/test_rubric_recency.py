@@ -6,8 +6,8 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from agentpypi._rubric import recency
-from agentpypi._rubric._dimension import Score
+from auntiepypi._rubric import recency
+from auntiepypi._rubric._dimension import Score
 
 _NOW = datetime(2026, 4, 29, 12, 0, 0, tzinfo=timezone.utc)
 

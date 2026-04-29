@@ -1,4 +1,4 @@
-"""Smoke tests for agentpypi's CLI (AFI rubric)."""
+"""Smoke tests for auntiepypi's CLI (AFI rubric)."""
 
 from __future__ import annotations
 
@@ -6,8 +6,8 @@ import json
 
 import pytest
 
-from agentpypi import __version__
-from agentpypi.cli import main
+from auntiepypi import __version__
+from auntiepypi.cli import main
 
 
 def test_version_flag(capsys: pytest.CaptureFixture[str]) -> None:
@@ -21,7 +21,7 @@ def test_help_no_subcommand(capsys: pytest.CaptureFixture[str]) -> None:
     rc = main([])
     assert rc == 0
     out = capsys.readouterr().out
-    assert "agentpypi" in out
+    assert "auntiepypi" in out
     assert "learn" in out
 
 
@@ -36,7 +36,7 @@ def test_learn_exits_zero(capsys: pytest.CaptureFixture[str]) -> None:
 def test_learn_json_parseable(capsys: pytest.CaptureFixture[str]) -> None:
     assert main(["learn", "--json"]) == 0
     payload = json.loads(capsys.readouterr().out)
-    assert payload["tool"] == "agentpypi"
+    assert payload["tool"] == "auntiepypi"
     assert payload["version"] == __version__
     assert payload["json_support"] is True
     assert payload["exit_codes"]["0"] == "success"
@@ -49,7 +49,7 @@ def test_learn_json_parseable(capsys: pytest.CaptureFixture[str]) -> None:
 
 
 def test_explain_self(capsys: pytest.CaptureFixture[str]) -> None:
-    assert main(["explain", "agentpypi"]) == 0
+    assert main(["explain", "auntiepypi"]) == 0
     assert capsys.readouterr().out.lstrip().startswith("#")
 
 
@@ -97,12 +97,12 @@ def test_explain_unknown_path_json_mode(
 
 
 def test_module_main_dispatches() -> None:
-    """`python -m agentpypi --version` should also work."""
+    """`python -m auntiepypi --version` should also work."""
     import subprocess
     import sys
 
     result = subprocess.run(
-        [sys.executable, "-m", "agentpypi", "--version"],
+        [sys.executable, "-m", "auntiepypi", "--version"],
         check=False,
         capture_output=True,
         text=True,
@@ -112,7 +112,7 @@ def test_module_main_dispatches() -> None:
 
 
 def test_unknown_top_level_verb_fails(capsys: pytest.CaptureFixture[str]) -> None:
-    """`agentpypi online ...` is in the catalog but not registered as a subcommand."""
+    """`auntiepypi online ...` is neither in the catalog nor registered, so argparse rejects it."""
     with pytest.raises(SystemExit) as exc:
         main(["online", "status", "shushu"])
     assert exc.value.code != 0
@@ -123,17 +123,17 @@ def test_unknown_top_level_verb_fails(capsys: pytest.CaptureFixture[str]) -> Non
 
 def test_explain_json_mode(capsys: pytest.CaptureFixture[str]) -> None:
     """Cover explain's --json branch (line 21 of explain.py)."""
-    rc = main(["explain", "--json", "agentpypi"])
+    rc = main(["explain", "--json", "auntiepypi"])
     assert rc == 0
     payload = json.loads(capsys.readouterr().out)
     assert "markdown" in payload
     assert "path" in payload
-    assert payload["path"] == ["agentpypi"]
+    assert payload["path"] == ["auntiepypi"]
 
 
 def test_explain_known_paths() -> None:
     """Cover the known_paths() function in explain/__init__.py (line 24)."""
-    from agentpypi.explain import known_paths
+    from auntiepypi.explain import known_paths
 
     paths = known_paths()
     assert isinstance(paths, list)
@@ -144,7 +144,7 @@ def test_explain_known_paths() -> None:
 
 
 def test_catalog_has_packages_entry():
-    from agentpypi.explain.catalog import ENTRIES
+    from auntiepypi.explain.catalog import ENTRIES
 
     assert ("packages",) in ENTRIES
     assert ("packages", "overview") in ENTRIES
@@ -152,17 +152,17 @@ def test_catalog_has_packages_entry():
 
 
 def test_catalog_root_mentions_packages_overview():
-    from agentpypi.explain.catalog import ENTRIES
+    from auntiepypi.explain.catalog import ENTRIES
 
-    root = ENTRIES[("agentpypi",)]
-    assert "agentpypi packages overview" in root
+    root = ENTRIES[("auntiepypi",)]
+    assert "auntiepypi packages overview" in root
 
 
 def test_learn_json_drops_online_adds_packages():
     import contextlib
     from io import StringIO
 
-    from agentpypi.cli import main
+    from auntiepypi.cli import main
 
     buf = StringIO()
     with contextlib.redirect_stdout(buf):

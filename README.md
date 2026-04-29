@@ -1,6 +1,6 @@
-# agentpypi
+# auntiepypi
 
-> agentpypi is both a CLI and an agent that maintains, uses, and serves
+> auntiepypi is both a CLI and an agent that maintains, uses, and serves
 > the CLI for managing PyPI packages. It supports remote (pypi.org)
 > today and local (mesh-hosted) indexes in future milestones. It
 > overviews packages — informational, not gating.
@@ -12,16 +12,16 @@ management) are planned for v0.2.0.
 ## Quick start
 
 ```bash
-uv tool install agentpypi
-agentpypi --version
-agentpypi packages overview --json | jq
+uv tool install auntiepypi
+auntiepypi --version
+auntiepypi packages overview --json | jq
 ```
 
 For the dashboard to show anything, add a configured package list to
 your repo's `pyproject.toml`:
 
 ```toml
-[tool.agentpypi]
+[tool.auntiepypi]
 packages = ["requests", "pip"]
 ```
 
@@ -32,7 +32,7 @@ See [`docs/about.md`](docs/about.md) for the longer non-technical explainer.
 ```bash
 uv sync                          # install + dev deps
 uv run pytest -n auto -v         # tests
-uv run agentpypi --version       # smoke
+uv run auntiepypi --version       # smoke
 uv run pre-commit install        # enable lint hooks
 ```
 

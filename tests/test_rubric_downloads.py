@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from agentpypi._rubric import downloads
-from agentpypi._rubric._dimension import Score
+from auntiepypi._rubric import downloads
+from auntiepypi._rubric._dimension import Score
 
 
 def _stats(last_week: int) -> dict:

@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from agentpypi._rubric import lifecycle
-from agentpypi._rubric._dimension import Score
+from auntiepypi._rubric import lifecycle
+from auntiepypi._rubric._dimension import Score
 
 
 def _pypi(classifier: str | None) -> dict:

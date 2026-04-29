@@ -1,4 +1,4 @@
-"""Tests for `agentpypi overview` (AFI rubric bundle 6)."""
+"""Tests for `auntiepypi overview` (AFI rubric bundle 6)."""
 
 from __future__ import annotations
 
@@ -6,14 +6,14 @@ import json
 
 import pytest
 
-from agentpypi.cli import main
+from auntiepypi.cli import main
 
 
 def test_overview_text_no_args(capsys: pytest.CaptureFixture[str]) -> None:
     assert main(["overview"]) == 0
     out = capsys.readouterr().out
     assert out.strip()
-    assert "# agentpypi" in out
+    assert "# auntiepypi" in out
     # v0.1.0: servers appear by their probe name (devpi / pypiserver), not
     # as the legacy "local-pypi-servers" aggregate section header.
     assert any(name in out for name in ("devpi", "pypiserver"))
@@ -24,10 +24,10 @@ def test_overview_json_shape(capsys: pytest.CaptureFixture[str]) -> None:
     assert main(["overview", "--json"]) == 0
     payload = json.loads(capsys.readouterr().out)
     assert isinstance(payload, dict)
-    assert payload["subject"] == "agentpypi"
+    assert payload["subject"] == "auntiepypi"
     assert isinstance(payload["sections"], list)
     # v0.1.0 shape: each section carries category / title / light / fields.
-    # [tool.agentpypi].packages is now configured so the composite emits
+    # [tool.auntiepypi].packages is now configured so the composite emits
     # packages sections first, followed by servers sections.
     assert len(payload["sections"]) >= 1
     categories = {s["category"] for s in payload["sections"]}
@@ -51,7 +51,7 @@ def test_overview_graceful_on_unknown_target(
     assert rc == 0
     captured = capsys.readouterr()
     assert "warning" in captured.err.lower()
-    assert "# agentpypi" in captured.out
+    assert "# auntiepypi" in captured.out
 
 
 def test_overview_graceful_on_unknown_target_json(

@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from agentpypi._rubric._dimension import DimensionResult, Score
-from agentpypi._rubric._runtime import roll_up
+from auntiepypi._rubric._dimension import DimensionResult, Score
+from auntiepypi._rubric._runtime import roll_up
 
 
 def _r(score: Score) -> DimensionResult:
@@ -54,7 +54,7 @@ def test_score_enum_values(score, expected_value):
 
 
 def test_evaluate_package_returns_one_result_per_dimension():
-    from agentpypi._rubric import DIMENSIONS, _runtime
+    from auntiepypi._rubric import DIMENSIONS, _runtime
 
     minimal_pypi = {
         "info": {
@@ -76,7 +76,7 @@ def test_evaluate_package_returns_one_result_per_dimension():
 
 
 def test_dimensions_registry_has_seven_entries():
-    from agentpypi._rubric import DIMENSIONS
+    from auntiepypi._rubric import DIMENSIONS
 
     names = [d.name for d in DIMENSIONS]
     assert names == [

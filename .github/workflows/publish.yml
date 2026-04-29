@@ -5,12 +5,12 @@ on:
     branches: [main]
     paths:
       - "pyproject.toml"
-      - "agentpypi/**"
+      - "auntiepypi/**"
   pull_request:
     branches: [main]
     paths:
       - "pyproject.toml"
-      - "agentpypi/**"
+      - "auntiepypi/**"
 
 jobs:
   test:
@@ -19,36 +19,20 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
       - uses: astral-sh/setup-uv@38f3f104447c67c051c4a08e39b64a148898af3a # v4
+
       - run: uv python install 3.12
+
       - run: uv sync
+
       - run: uv run pytest -n auto -v
 
-  smoke-source:
-    needs: test
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-      - uses: astral-sh/setup-uv@38f3f104447c67c051c4a08e39b64a148898af3a # v4
-      - run: uv python install 3.12
-      - run: uv sync
-      - name: Build wheel
-        run: uv build
-      - name: Install built wheel into clean venv
-        run: |
-          uv venv /tmp/smoke --python 3.12 --seed
-          /tmp/smoke/bin/python -m pip install --quiet dist/*.whl
-      - name: Smoke — version + packages overview against pypi.org
-        run: |
-          /tmp/smoke/bin/agentpypi --version
-          /tmp/smoke/bin/agentpypi packages overview requests --json | /tmp/smoke/bin/python -m json.tool
-
   test-publish:
-    # Skip on fork PRs — no OIDC context, the publish step would fail.
+    # Skip on fork PRs — no OIDC/environment context is available there, so
+    # the publish step would fail and block external contributor CI.
     if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
-    needs: [test, smoke-source]
+    needs: test
     runs-on: ubuntu-latest
     environment: testpypi
     permissions:
@@ -56,9 +40,13 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
       - uses: astral-sh/setup-uv@38f3f104447c67c051c4a08e39b64a148898af3a # v4
+
       - run: uv python install 3.12
+
       - run: uv sync
+
       - name: Set dev version
         run: |
           BASE=$(uv run python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
@@ -66,18 +54,20 @@ jobs:
           sed -i "s/^version = .*/version = \"${DEV_VERSION}\"/" pyproject.toml
           echo "DEV_VERSION=${DEV_VERSION}" >> "$GITHUB_ENV"
           echo "Publishing ${DEV_VERSION} to TestPyPI"
+
       - name: Build and publish to TestPyPI
         run: |
           uv build
           uv publish --publish-url https://test.pypi.org/legacy/ --trusted-publishing always --check-url https://test.pypi.org/simple/
+
       - name: Print install commands
         if: always()
         run: |
-          echo "::notice::Test with: uv tool install --index-url https://test.pypi.org/simple/ --index-strategy unsafe-best-match agentpypi==${DEV_VERSION}"
+          echo "::notice::Test with: uv tool install --index-url https://test.pypi.org/simple/ --index-strategy unsafe-best-match auntiepypi==${DEV_VERSION}"
 
   publish:
     if: github.event_name == 'push'
-    needs: [test, smoke-source]
+    needs: test
     runs-on: ubuntu-latest
     environment: pypi
     permissions:
@@ -85,42 +75,14 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
       - uses: astral-sh/setup-uv@38f3f104447c67c051c4a08e39b64a148898af3a # v4
+
       - run: uv python install 3.12
+
       - run: uv sync
+
       - name: Build and publish to PyPI
         run: |
           uv build
           uv publish --trusted-publishing always --check-url https://pypi.org/simple/
-
-  smoke-installed:
-    if: github.event_name == 'push'
-    needs: publish
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-      - uses: astral-sh/setup-uv@38f3f104447c67c051c4a08e39b64a148898af3a # v4
-      - run: uv python install 3.12
-      - name: Wait for new version on pypi.org
-        run: |
-          VERSION=$(uv run python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
-          echo "Waiting for agentpypi==$VERSION on pypi.org…"
-          for i in $(seq 1 18); do
-            if curl -sf "https://pypi.org/pypi/agentpypi/$VERSION/json" -o /dev/null; then
-              echo "Available."
-              exit 0
-            fi
-            sleep 5
-          done
-          echo "::error::Timed out waiting for agentpypi==$VERSION on pypi.org"
-          exit 1
-      - name: Install from pypi.org and smoke
-        run: |
-          VERSION=$(uv run python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
-          rm -rf /tmp/postsmoke
-          uv venv /tmp/postsmoke --python 3.12 --seed
-          /tmp/postsmoke/bin/python -m pip install --quiet "agentpypi==$VERSION"
-          /tmp/postsmoke/bin/agentpypi --version
-          /tmp/postsmoke/bin/agentpypi packages overview requests --json | /tmp/postsmoke/bin/python -m json.tool

@@ -6,7 +6,7 @@ TestPyPI step needs Trusted Publishing already configured by the time a
 PR opens.
 
 The shape below mirrors `../steward/` (the canonical Culture-sibling
-template) with adjustments for agentpypi's own opinions in
+template) with adjustments for auntiepypi's own opinions in
 `../CLAUDE.md` (pre-commit hooks; `flake8-bandit` + `flake8-bugbear`;
 `pylint --errors-only`).
 
@@ -17,9 +17,9 @@ if `../CLAUDE.md` later tightens the toolchain.
 
 ```toml
 [project]
-name = "agentpypi"
+name = "auntiepypi"
 version = "0.0.1"
-description = "agentpypi — both ends of the Python distribution pipe for the AgentCulture mesh."
+description = "auntiepypi — both ends of the Python distribution pipe for the AgentCulture mesh."
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.12"
@@ -37,18 +37,18 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/agentculture/agentpypi"
-Issues = "https://github.com/agentculture/agentpypi/issues"
+Homepage = "https://github.com/agentculture/auntiepypi"
+Issues = "https://github.com/agentculture/auntiepypi/issues"
 
 [project.scripts]
-agentpypi = "agentpypi.cli:main"
+auntiepypi = "auntiepypi.cli:main"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["agentpypi"]
+packages = ["auntiepypi"]
 
 [dependency-groups]
 dev = [
@@ -66,8 +66,8 @@ dev = [
 ]
 
 [tool.coverage.run]
-source = ["agentpypi"]
-omit = ["agentpypi/__pycache__/*"]
+source = ["auntiepypi"]
+omit = ["auntiepypi/__pycache__/*"]
 
 [tool.coverage.report]
 fail_under = 60
@@ -81,7 +81,7 @@ exclude_lines = [
 [tool.isort]
 profile = "black"
 line_length = 100
-known_first_party = ["agentpypi"]
+known_first_party = ["auntiepypi"]
 
 [tool.black]
 line-length = 100
@@ -98,9 +98,9 @@ addopts = "-ra"
 
 Notes:
 
-- **`name = "agentpypi"`** matches the README's `uv tool install agentpypi`.
+- **`name = "auntiepypi"`** matches the README's `uv tool install auntiepypi`.
   If PyPI returns a name conflict at first publish, rename to
-  `agentpypi-cli` and update `[project.scripts]` accordingly.
+  `auntiepypi-cli` and update `[project.scripts]` accordingly.
 - **No runtime deps** at v0.0.1. Add only when a verb needs something
   stdlib can't do.
 - **`fail_under = 60`** is steward's threshold; tighten as coverage
@@ -131,7 +131,7 @@ Vendored verbatim from steward — keeps formatting consistent across
 the mesh:
 
 ```yaml
-# markdownlint-cli2 config for agentpypi.
+# markdownlint-cli2 config for auntiepypi.
 # markdownlint-cli2 stops walking at the git root, so a per-user global
 # config in the home directory isn't picked up from inside the repo.
 # Mirrors the afi-cli / cfafi / steward preset for workspace consistency.
@@ -164,7 +164,7 @@ every PR runs the skill.
 ## 4. `.github/workflows/tests.yml`
 
 Three jobs: `test`, `lint`, `version-check`. Adapt steward's verbatim,
-substituting `steward` → `agentpypi` everywhere:
+substituting `steward` → `auntiepypi` everywhere:
 
 ```yaml
 name: Tests
@@ -185,7 +185,7 @@ jobs:
       - uses: astral-sh/setup-uv@38f3f104447c67c051c4a08e39b64a148898af3a # v4
       - run: uv python install 3.12
       - run: uv sync
-      - run: uv run pytest -n auto --cov=agentpypi --cov-report=xml:coverage.xml --cov-report=term -v
+      - run: uv run pytest -n auto --cov=auntiepypi --cov-report=xml:coverage.xml --cov-report=term -v
 
   lint:
     runs-on: ubuntu-latest
@@ -200,15 +200,15 @@ jobs:
       - run: uv python install 3.12
       - run: uv sync
       - name: black --check
-        run: uv run black --check agentpypi tests
+        run: uv run black --check auntiepypi tests
       - name: isort --check
-        run: uv run isort --check-only agentpypi tests
+        run: uv run isort --check-only auntiepypi tests
       - name: flake8
-        run: uv run flake8 agentpypi tests
+        run: uv run flake8 auntiepypi tests
       - name: pylint --errors-only
-        run: uv run pylint --errors-only agentpypi
+        run: uv run pylint --errors-only auntiepypi
       - name: bandit
-        run: uv run bandit -c pyproject.toml -r agentpypi
+        run: uv run bandit -c pyproject.toml -r auntiepypi
       - name: markdownlint-cli2
         run: |
           npm install -g markdownlint-cli2@0.21.0
@@ -270,7 +270,7 @@ PRs publish a `.dev<run_number>` to TestPyPI; merges to `main` publish
 to PyPI. Both via OIDC Trusted Publishing — no API tokens.
 
 `ghafi` provisions the `pypi` and `testpypi` GitHub Environments and
-the Trusted Publishing claims pointing at `agentculture/agentpypi`.
+the Trusted Publishing claims pointing at `agentculture/auntiepypi`.
 That setup must be in place before this workflow can succeed; if you
 own the repo, run `ghafi` first (see `../ghafi/README.md`).
 
@@ -282,12 +282,12 @@ on:
     branches: [main]
     paths:
       - "pyproject.toml"
-      - "agentpypi/**"
+      - "auntiepypi/**"
   pull_request:
     branches: [main]
     paths:
       - "pyproject.toml"
-      - "agentpypi/**"
+      - "auntiepypi/**"
 
 jobs:
   test:
@@ -329,7 +329,7 @@ jobs:
       - name: Print install commands
         if: always()
         run: |
-          echo "::notice::Test with: uv tool install --index-url https://test.pypi.org/simple/ --index-strategy unsafe-best-match agentpypi==${DEV_VERSION}"
+          echo "::notice::Test with: uv tool install --index-url https://test.pypi.org/simple/ --index-strategy unsafe-best-match auntiepypi==${DEV_VERSION}"
 
   publish:
     if: github.event_name == 'push'
@@ -372,15 +372,15 @@ After committing all of the above:
 # Local end-to-end smoke
 uv sync
 uv run pytest -n auto -v
-uv run black --check agentpypi tests
-uv run isort --check-only agentpypi tests
-uv run flake8 agentpypi tests
-uv run bandit -c pyproject.toml -r agentpypi
+uv run black --check auntiepypi tests
+uv run isort --check-only auntiepypi tests
+uv run flake8 auntiepypi tests
+uv run bandit -c pyproject.toml -r auntiepypi
 markdownlint-cli2 "**/*.md" "#node_modules"
 bash .claude/skills/pr-review/scripts/portability-lint.sh
 
 # Steward's external diagnosis
-(cd ../steward && uv run steward doctor --scope self ../agentpypi)
+(cd ../steward && uv run steward doctor --scope self ../auntiepypi)
 ```
 
 Open a no-op PR (typo fix in README) once Trusted Publishing is wired,

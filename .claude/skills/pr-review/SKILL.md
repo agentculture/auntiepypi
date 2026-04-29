@@ -1,17 +1,17 @@
 ---
 name: pr-review
 description: >
-  agentpypi PR workflow: branch, commit, push, PR, wait for Qodo/Copilot,
+  auntiepypi PR workflow: branch, commit, push, PR, wait for Qodo/Copilot,
   triage, fix, reply, resolve. Adds a portability lint (no absolute /home paths,
   no per-user dotfile refs in committed docs), an alignment-delta check when
   CLAUDE.md or culture.yaml change, and greenfield-aware test/version-bump
-  steps. Use when: creating PRs in agentpypi, handling review feedback, or the
+  steps. Use when: creating PRs in auntiepypi, handling review feedback, or the
   user says "create PR", "review comments", "address feedback", "resolve threads".
 ---
 
-# PR Review — agentpypi edition
+# PR Review — auntiepypi edition
 
-agentpypi's PRs touch CLI verb surfaces, `culture.yaml` (when it lands),
+auntiepypi's PRs touch CLI verb surfaces, `culture.yaml` (when it lands),
 quality-pipeline configs, and vendored skills. Path leaks and per-user
 config dependencies are the recurring bug class across every AgentCulture
 sibling — this skill catches both up front, plus an alignment-delta check
@@ -98,7 +98,7 @@ mention it in your reply.
 ## Greenfield-aware steps
 
 The lint and the workflow script are always-on. Stack-specific steps are
-conditional and currently active for agentpypi as the v0.0.1 quality
+conditional and currently active for auntiepypi as the v0.0.1 quality
 pipeline lands:
 
 ```bash
@@ -114,7 +114,7 @@ review surfaces.
 
 Every comment must get a reply — no silent fixes. Always pass `--resolve`
 when batch-replying so threads close automatically. Reference the
-review-comment IDs in the fix-up commit message. agentpypi has no
+review-comment IDs in the fix-up commit message. auntiepypi has no
 SonarCloud integration at v0.0.1 and isn't a registered mesh agent yet
 (culture.yaml lands but no daemon runs), so skip the sonarclaude check
 and the post-merge IRC ping that Culture's full `pr-review` includes —

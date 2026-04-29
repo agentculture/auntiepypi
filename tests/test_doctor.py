@@ -1,4 +1,4 @@
-"""Tests for `agentpypi doctor`."""
+"""Tests for `auntiepypi doctor`."""
 
 from __future__ import annotations
 
@@ -8,10 +8,10 @@ from typing import Callable, Iterator
 
 import pytest
 
-from agentpypi._probes._probe import Probe
-from agentpypi._probes._runtime import ProbeResult
-from agentpypi.cli import _commands, main
-from agentpypi.cli._commands.doctor import _diagnose, _try_start
+from auntiepypi._probes._probe import Probe
+from auntiepypi._probes._runtime import ProbeResult
+from auntiepypi.cli import _commands, main
+from auntiepypi.cli._commands.doctor import _diagnose, _try_start
 
 
 def _set_runner(runner: Callable[..., subprocess.CompletedProcess[str]]) -> None:
@@ -49,7 +49,7 @@ def test_doctor_dry_run_json(capsys: pytest.CaptureFixture[str]) -> None:
     rc = main(["doctor", "--json"])
     assert rc == 0
     payload = json.loads(capsys.readouterr().out)
-    assert payload["subject"] == "agentpypi doctor"
+    assert payload["subject"] == "auntiepypi doctor"
     assert payload["fix_applied"] is False
     items = payload["sections"][0]["items"]
     for item in items:
@@ -178,7 +178,7 @@ def test_doctor_renders_down_with_detail_and_fix_ok(
 ) -> None:
     """Cover _apply_fix detail/diagnosis=fixed branches (lines 83, 85) and
     _render_text fix_attempted rendering (lines 139, 141-142)."""
-    from agentpypi.cli._commands import doctor as _doctor_mod
+    from auntiepypi.cli._commands import doctor as _doctor_mod
 
     # Track how many times probe_status is called per probe name.
     call_counts: dict[str, int] = {}
@@ -231,7 +231,7 @@ def test_doctor_renders_down_with_detail_text(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Cover the 'down with detail' status in _render_text output."""
-    from agentpypi.cli._commands import doctor as _doctor_mod
+    from auntiepypi.cli._commands import doctor as _doctor_mod
 
     def fake_probe_status(probe, **kwargs):  # noqa: ANN001
         if probe.name == "devpi":
@@ -263,10 +263,10 @@ def test_render_text_string_remediation() -> None:
     This path fires when a probe has no start_command; _diagnose sets
     remediation to a plain string (not a list).
     """
-    from agentpypi.cli._commands.doctor import _render_text
+    from auntiepypi.cli._commands.doctor import _render_text
 
     payload = {
-        "subject": "agentpypi doctor",
+        "subject": "auntiepypi doctor",
         "sections": [
             {
                 "name": "local-pypi-servers",

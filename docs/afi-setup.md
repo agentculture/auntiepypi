@@ -25,7 +25,7 @@ afi --version
 
 ## Cite the reference tree
 
-From the agentpypi repo root:
+From the auntiepypi repo root:
 
 ```bash
 afi cli cite .
@@ -55,13 +55,13 @@ authority on the mechanics.
 
 The reference tree splits files into two buckets.
 
-### Stable-contract — copy verbatim into `agentpypi/cli/`
+### Stable-contract — copy verbatim into `auntiepypi/cli/`
 
 These encode the rubric and shouldn't be rewritten. Substitute only the
-tokens (`{{project_name}}` → `agentpypi`, `{{slug}}` → `agentpypi`,
-`{{module}}` → `agentpypi`):
+tokens (`{{project_name}}` → `auntiepypi`, `{{slug}}` → `auntiepypi`,
+`{{module}}` → `auntiepypi`):
 
-- `_errors.py` — `AgentpypiError` + exit-code constants. Exit-code policy
+- `_errors.py` — `AuntiepypiError` + exit-code constants. Exit-code policy
   follows the afi rubric (`0` success / `1` user error / `2` env error).
   Per `../CLAUDE.md`'s "CLI shape", the trio is non-negotiable.
 - `_output.py` — stdout/stderr split, `--json` plumbing.
@@ -70,22 +70,22 @@ tokens (`{{project_name}}` → `agentpypi`, `{{slug}}` → `agentpypi`,
 
 ### Shape-adapt — model and rewrite
 
-These show the *structure*; you rewrite them to fit agentpypi's nouns
+These show the *structure*; you rewrite them to fit auntiepypi's nouns
 (`online`, `local`) and verb set:
 
-- `__init__.py` — `__version__` via `importlib.metadata.version("agentpypi")`.
+- `__init__.py` — `__version__` via `importlib.metadata.version("auntiepypi")`.
   No literal version string anywhere else (per `../CLAUDE.md` Version
   discipline).
-- `__main__.py` — argparse entry that routes `python -m agentpypi`.
+- `__main__.py` — argparse entry that routes `python -m auntiepypi`.
 - `learn.py` — generates self-teaching prompt from the explain catalog.
-- `whoami.py` — smallest auth probe. For agentpypi: report which
+- `whoami.py` — smallest auth probe. For auntiepypi: report which
   PyPI / TestPyPI / local index the current env is pointed at.
 - `_commands/` — one module per noun. Stub `online.py` and `local.py`
-  with `NotImplementedError` raised through the `AgentpypiError`
+  with `NotImplementedError` raised through the `AuntiepypiError`
   sentinel until the noun design lands (per `../CLAUDE.md` "Do not
   implement yet" — verb sets are not frozen).
 - `tests/test_cli_*.py` — model the assertion shape, but adapt to
-  agentpypi's verbs. The non-negotiable smoke tests at v0.0.1
+  auntiepypi's verbs. The non-negotiable smoke tests at v0.0.1
   (per `../CLAUDE.md` Roadmap) are `--version` and `learn --json`.
 
 ## Wire the entry point
@@ -94,15 +94,15 @@ In `pyproject.toml` (see `./quality-pipeline.md` for the full template):
 
 ```toml
 [project.scripts]
-agentpypi = "agentpypi.cli:main"
+auntiepypi = "auntiepypi.cli:main"
 ```
 
 Smoke check:
 
 ```bash
-uv run agentpypi --version
-uv run agentpypi learn --json | head
-uv run python -m agentpypi --version
+uv run auntiepypi --version
+uv run auntiepypi learn --json | head
+uv run python -m auntiepypi --version
 ```
 
 All three should succeed.
@@ -130,5 +130,5 @@ Fix every failing check before opening the first PR. Per
 `afi cli cite .` is idempotent. When `afi-cli` ships a new reference
 tree (rubric tightened, new bundle added), re-cite, re-read the diff
 in `.afi/reference/python-cli/`, and re-apply the deltas. The applied
-copies under `agentpypi/cli/` don't auto-update — that's the
+copies under `auntiepypi/cli/` don't auto-update — that's the
 "cite-don't-import" tradeoff.

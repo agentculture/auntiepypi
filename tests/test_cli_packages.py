@@ -1,4 +1,4 @@
-"""Tests for `agentpypi packages overview [PKG]`."""
+"""Tests for `auntiepypi packages overview [PKG]`."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import json
 
 import pytest
 
-from agentpypi.cli import main
+from auntiepypi.cli import main
 
 
 def _good_pypi(name: str = "x") -> dict:
@@ -35,24 +35,24 @@ def _good_stats() -> dict:
 @pytest.fixture
 def patched_sources(monkeypatch):
     """Patch the consumer module's local bindings (from ... import fetch_pypi)."""
-    target = "agentpypi.cli._commands._packages.overview"
+    target = "auntiepypi.cli._commands._packages.overview"
     monkeypatch.setattr(f"{target}.fetch_pypi", lambda pkg: _good_pypi(pkg))
     monkeypatch.setattr(f"{target}.fetch_pypistats", lambda pkg: _good_stats())
 
 
 def test_overview_no_arg_requires_config(tmp_path, monkeypatch, capsys):
-    """Without [tool.agentpypi].packages, no-arg form errors with code 1."""
+    """Without [tool.auntiepypi].packages, no-arg form errors with code 1."""
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("HOME", str(tmp_path))
     rc = main(["packages", "overview"])
     assert rc == 1
     err = capsys.readouterr().err
-    assert "tool.agentpypi" in err
+    assert "tool.auntiepypi" in err
     assert "hint:" in err
 
 
 def test_overview_no_arg_emits_dashboard(tmp_path, monkeypatch, capsys, patched_sources):
-    (tmp_path / "pyproject.toml").write_text('[tool.agentpypi]\npackages = ["alpha", "beta"]\n')
+    (tmp_path / "pyproject.toml").write_text('[tool.auntiepypi]\npackages = ["alpha", "beta"]\n')
     monkeypatch.chdir(tmp_path)
     rc = main(["packages", "overview", "--json"])
     assert rc == 0
@@ -100,7 +100,7 @@ def test_overview_invalid_pkg_name_exits_1(tmp_path, monkeypatch, capsys):
 
 def test_overview_unknown_to_pypi_yields_unknown_section(tmp_path, monkeypatch, capsys):
     """Package that pypi.org returns 404 for: deep-dive lights all unknown."""
-    from agentpypi._rubric._fetch import FetchError
+    from auntiepypi._rubric._fetch import FetchError
 
     def fail_pypi(pkg):
         raise FetchError("http 404", status=404)
@@ -108,7 +108,7 @@ def test_overview_unknown_to_pypi_yields_unknown_section(tmp_path, monkeypatch, 
     def fail_stats(pkg):
         raise FetchError("http 404", status=404)
 
-    target = "agentpypi.cli._commands._packages.overview"
+    target = "auntiepypi.cli._commands._packages.overview"
     monkeypatch.setattr(f"{target}.fetch_pypi", fail_pypi)
     monkeypatch.setattr(f"{target}.fetch_pypistats", fail_stats)
     monkeypatch.chdir(tmp_path)
@@ -122,7 +122,7 @@ def test_overview_unknown_to_pypi_yields_unknown_section(tmp_path, monkeypatch, 
 
 def test_overview_all_fetches_fail_in_dashboard_returns_2(tmp_path, monkeypatch, capsys):
     """Dashboard mode: every package's both fetches fail → exit 2 (env error)."""
-    from agentpypi._rubric._fetch import FetchError
+    from auntiepypi._rubric._fetch import FetchError
 
     def fail_pypi(pkg):
         raise FetchError("fetch failed: URLError", status=None)
@@ -130,10 +130,10 @@ def test_overview_all_fetches_fail_in_dashboard_returns_2(tmp_path, monkeypatch,
     def fail_stats(pkg):
         raise FetchError("fetch failed: URLError", status=None)
 
-    target = "agentpypi.cli._commands._packages.overview"
+    target = "auntiepypi.cli._commands._packages.overview"
     monkeypatch.setattr(f"{target}.fetch_pypi", fail_pypi)
     monkeypatch.setattr(f"{target}.fetch_pypistats", fail_stats)
-    (tmp_path / "pyproject.toml").write_text('[tool.agentpypi]\npackages = ["alpha", "beta"]\n')
+    (tmp_path / "pyproject.toml").write_text('[tool.auntiepypi]\npackages = ["alpha", "beta"]\n')
     monkeypatch.chdir(tmp_path)
     rc = main(["packages", "overview", "--json"])
     assert rc == 2
@@ -143,7 +143,7 @@ def test_overview_all_fetches_fail_in_dashboard_returns_2(tmp_path, monkeypatch,
 
 
 def test_packages_with_no_subverb_prints_help_and_exits_1(tmp_path, monkeypatch, capsys):
-    """Bare `agentpypi packages` (no subverb) → help + EXIT_USER_ERROR."""
+    """Bare `auntiepypi packages` (no subverb) → help + EXIT_USER_ERROR."""
     monkeypatch.chdir(tmp_path)
     rc = main(["packages"])
     assert rc == 1
@@ -151,7 +151,7 @@ def test_packages_with_no_subverb_prints_help_and_exits_1(tmp_path, monkeypatch,
 
 def test_deep_dive_env_failure_returns_2(tmp_path, monkeypatch, capsys):
     """Single-pkg mode: both fetches fail with non-404 → exit 2 (env error)."""
-    from agentpypi._rubric._fetch import FetchError
+    from auntiepypi._rubric._fetch import FetchError
 
     def fail_pypi(pkg):
         raise FetchError("fetch failed: URLError", status=None)
@@ -159,7 +159,7 @@ def test_deep_dive_env_failure_returns_2(tmp_path, monkeypatch, capsys):
     def fail_stats(pkg):
         raise FetchError("fetch failed: URLError", status=None)
 
-    target = "agentpypi.cli._commands._packages.overview"
+    target = "auntiepypi.cli._commands._packages.overview"
     monkeypatch.setattr(f"{target}.fetch_pypi", fail_pypi)
     monkeypatch.setattr(f"{target}.fetch_pypistats", fail_stats)
     monkeypatch.chdir(tmp_path)
@@ -171,7 +171,7 @@ def test_deep_dive_env_failure_returns_2(tmp_path, monkeypatch, capsys):
 
 def test_deep_dive_404_still_returns_0(tmp_path, monkeypatch, capsys):
     """Single-pkg mode: pypi 404 is data, not env failure → exit 0."""
-    from agentpypi._rubric._fetch import FetchError
+    from auntiepypi._rubric._fetch import FetchError
 
     def fail_pypi(pkg):
         raise FetchError("http 404", status=404)
@@ -179,7 +179,7 @@ def test_deep_dive_404_still_returns_0(tmp_path, monkeypatch, capsys):
     def fail_stats(pkg):
         raise FetchError("http 404", status=404)
 
-    target = "agentpypi.cli._commands._packages.overview"
+    target = "auntiepypi.cli._commands._packages.overview"
     monkeypatch.setattr(f"{target}.fetch_pypi", fail_pypi)
     monkeypatch.setattr(f"{target}.fetch_pypistats", fail_stats)
     monkeypatch.chdir(tmp_path)

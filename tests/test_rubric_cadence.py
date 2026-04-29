@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from agentpypi._rubric import cadence
-from agentpypi._rubric._dimension import Score
+from auntiepypi._rubric import cadence
+from auntiepypi._rubric._dimension import Score
 
 _NOW = datetime(2026, 4, 29, 12, 0, 0, tzinfo=timezone.utc)
 

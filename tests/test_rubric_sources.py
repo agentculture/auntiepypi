@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from agentpypi._rubric import _sources
-from agentpypi._rubric._fetch import FetchError
+from auntiepypi._rubric import _sources
+from auntiepypi._rubric._fetch import FetchError
 
 
 def test_fetch_pypi_calls_get_json_with_correct_url(monkeypatch):

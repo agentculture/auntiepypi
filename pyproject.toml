@@ -1,7 +1,7 @@
 [project]
-name = "agentpypi"
-version = "0.1.5"
-description = "agentpypi — both ends of the Python distribution pipe for the AgentCulture mesh."
+name = "auntiepypi"
+version = "0.2.0"
+description = "auntiepypi — both ends of the Python distribution pipe for the AgentCulture mesh."
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.12"
@@ -20,18 +20,18 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/agentculture/agentpypi"
-Issues = "https://github.com/agentculture/agentpypi/issues"
+Homepage = "https://github.com/agentculture/auntiepypi"
+Issues = "https://github.com/agentculture/auntiepypi/issues"
 
 [project.scripts]
-agentpypi = "agentpypi.cli:main"
+auntiepypi = "auntiepypi.cli:main"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["agentpypi"]
+packages = ["auntiepypi"]
 
 [dependency-groups]
 dev = [
@@ -49,8 +49,8 @@ dev = [
 ]
 
 [tool.coverage.run]
-source = ["agentpypi"]
-omit = ["agentpypi/__pycache__/*"]
+source = ["auntiepypi"]
+omit = ["auntiepypi/__pycache__/*"]
 
 [tool.coverage.report]
 fail_under = 95
@@ -65,7 +65,7 @@ exclude_lines = [
 [tool.isort]
 profile = "black"
 line_length = 100
-known_first_party = ["agentpypi"]
+known_first_party = ["auntiepypi"]
 
 [tool.black]
 line-length = 100
@@ -82,12 +82,12 @@ markers = [
     "live: opt-in tests that hit pypi.org / pypistats.org over the network",
 ]
 
-[tool.agentpypi]
-# Packages this repo cares about for `agentpypi packages overview`.
+[tool.auntiepypi]
+# Packages this repo cares about for `auntiepypi packages overview`.
 # These are AgentCulture siblings published to pypi.org. Add or remove as
 # the mesh evolves.
 packages = [
-    "agentpypi",
+    "auntiepypi",
     "afi-cli",
     "shushu",
     "ghafi",
