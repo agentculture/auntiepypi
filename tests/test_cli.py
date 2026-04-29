@@ -66,7 +66,8 @@ def test_explain_each_registered_verb(capsys: pytest.CaptureFixture[str]) -> Non
 
 
 def test_explain_planned_nouns(capsys: pytest.CaptureFixture[str]) -> None:
-    for noun in ("online", "local"):
+    # `local` stays in the catalog as a planned noun; `online` was removed.
+    for noun in ("local",):
         capsys.readouterr()
         assert main(["explain", noun]) == 0
         out = capsys.readouterr().out
@@ -139,3 +140,18 @@ def test_explain_known_paths() -> None:
     # Root and all registered verbs should be present.
     assert any(p == () for p in paths)
     assert any("learn" in p for p in paths)
+
+
+def test_catalog_has_packages_entry():
+    from agentpypi.explain.catalog import ENTRIES
+
+    assert ("packages",) in ENTRIES
+    assert ("packages", "overview") in ENTRIES
+    assert ("online",) not in ENTRIES
+
+
+def test_catalog_root_mentions_packages_overview():
+    from agentpypi.explain.catalog import ENTRIES
+
+    root = ENTRIES[("agentpypi",)]
+    assert "agentpypi packages overview" in root
