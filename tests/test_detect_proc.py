@@ -50,10 +50,12 @@ def test_scan_proc_root_finds_matching_cmdline(tmp_path) -> None:
 @linux_only
 def test_parse_proc_net_tcp_extracts_listening_pids(tmp_path) -> None:
     """0A in the state column means LISTEN; that's what we care about."""
-    body = """\
-  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode
-   0: 0100007F:1F90 00000000:0000 0A 00000000:00000000 00:00000000 00000000  1000        0 9999 1 ffff 100 0 0 10 0
-"""
+    body = (
+        "  sl  local_address rem_address   st tx_queue rx_queue tr tm->when "
+        "retrnsmt   uid  timeout inode\n"
+        "   0: 0100007F:1F90 00000000:0000 0A 00000000:00000000 00:00000000 "
+        "00000000  1000        0 9999 1 ffff 100 0 0 10 0\n"
+    )
     tcp_path = tmp_path / "proc_net_tcp"
     tcp_path.write_text(body)
     listeners = parse_proc_net_tcp(tcp_path)
@@ -77,7 +79,8 @@ def test_full_pipeline_links_pid_to_port(tmp_path) -> None:
     net_dir.mkdir()
     (net_dir / "tcp").write_text(
         "  sl local rem st\n"
-        "   0: 0100007F:1F90 00000000:0000 0A 00000000:00000000 00:00000000 00000000  1000        0 9999 1 ffff 100 0 0 10 0\n"
+        "   0: 0100007F:1F90 00000000:0000 0A 00000000:00000000 00:00000000 "
+        "00000000  1000        0 9999 1 ffff 100 0 0 10 0\n"
     )
     detections = detect(declared=[], scan_processes=True, proc_root=proc)
     assert len(detections) == 1

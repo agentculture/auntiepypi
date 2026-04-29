@@ -75,9 +75,7 @@ def scan_proc_root(proc_root: Path) -> list[_ProcMatch]:
             cmdline_bytes = cmdline_path.read_bytes()
         except OSError:
             continue
-        cmdline = (
-            cmdline_bytes.replace(b"\x00", b" ").decode("utf-8", errors="replace").strip()
-        )
+        cmdline = cmdline_bytes.replace(b"\x00", b" ").decode("utf-8", errors="replace").strip()
         comm = (_read_text(entry / "comm") or "").strip()
         if not any(p in cmdline or p in comm for p in KNOWN_CMDLINE_PATTERNS):
             continue

@@ -69,7 +69,11 @@ def probe_endpoint(
         except OSError:
             body = None
         return ProbeOutcome(
-            url=url, tcp_open=True, http_status=err.code, body=body, error=None,
+            url=url,
+            tcp_open=True,
+            http_status=err.code,
+            body=body,
+            error=None,
         )
     except OSError as err:  # URLError, timeout, etc.
         return ProbeOutcome(

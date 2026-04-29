@@ -34,9 +34,7 @@ def composite_env(tmp_path, monkeypatch):
     target = "auntiepypi.cli._commands._packages.overview"
     monkeypatch.setattr(f"{target}.fetch_pypi", lambda pkg: _good_pypi(pkg))
     monkeypatch.setattr(f"{target}.fetch_pypistats", lambda pkg: {"data": {"last_week": 100}})
-    (tmp_path / "pyproject.toml").write_text(
-        '[tool.auntiepypi]\npackages = ["alpha"]\n'
-    )
+    (tmp_path / "pyproject.toml").write_text('[tool.auntiepypi]\npackages = ["alpha"]\n')
     monkeypatch.chdir(tmp_path)
 
 
@@ -57,9 +55,7 @@ def test_no_arg_emits_both_categories(composite_env, capsys, monkeypatch) -> Non
             source="declared",
         ),
     ]
-    monkeypatch.setattr(
-        "auntiepypi.cli._commands.overview.detect_all", _stub_detect(detections)
-    )
+    monkeypatch.setattr("auntiepypi.cli._commands.overview.detect_all", _stub_detect(detections))
     rc = main(["overview", "--json"])
     assert rc == 0
     payload = json.loads(capsys.readouterr().out)
@@ -83,9 +79,7 @@ def test_declared_servers_show_up_in_composite(composite_env, capsys, monkeypatc
             unit="pypi.service",
         ),
     ]
-    monkeypatch.setattr(
-        "auntiepypi.cli._commands.overview.detect_all", _stub_detect(detections)
-    )
+    monkeypatch.setattr("auntiepypi.cli._commands.overview.detect_all", _stub_detect(detections))
     rc = main(["overview", "--json"])
     assert rc == 0
     payload = json.loads(capsys.readouterr().out)
@@ -108,9 +102,7 @@ def test_target_resolves_to_declared_name(composite_env, capsys, monkeypatch) ->
             source="declared",
         ),
     ]
-    monkeypatch.setattr(
-        "auntiepypi.cli._commands.overview.detect_all", _stub_detect(detections)
-    )
+    monkeypatch.setattr("auntiepypi.cli._commands.overview.detect_all", _stub_detect(detections))
     rc = main(["overview", "main", "--json"])
     assert rc == 0
     payload = json.loads(capsys.readouterr().out)
@@ -141,9 +133,7 @@ def test_target_resolves_to_bare_flavor_alias(composite_env, capsys, monkeypatch
             source="declared",
         ),
     ]
-    monkeypatch.setattr(
-        "auntiepypi.cli._commands.overview.detect_all", _stub_detect(detections)
-    )
+    monkeypatch.setattr("auntiepypi.cli._commands.overview.detect_all", _stub_detect(detections))
     rc = main(["overview", "pypiserver", "--json"])
     assert rc == 0
     payload = json.loads(capsys.readouterr().out)
@@ -163,9 +153,7 @@ def test_target_resolves_to_auto_name_with_port(composite_env, capsys, monkeypat
             source="port",
         ),
     ]
-    monkeypatch.setattr(
-        "auntiepypi.cli._commands.overview.detect_all", _stub_detect(detections)
-    )
+    monkeypatch.setattr("auntiepypi.cli._commands.overview.detect_all", _stub_detect(detections))
     rc = main(["overview", "pypiserver:8080", "--json"])
     assert rc == 0
     payload = json.loads(capsys.readouterr().out)
@@ -173,9 +161,7 @@ def test_target_resolves_to_auto_name_with_port(composite_env, capsys, monkeypat
 
 
 def test_target_resolves_to_package(composite_env, capsys, monkeypatch) -> None:
-    monkeypatch.setattr(
-        "auntiepypi.cli._commands.overview.detect_all", _stub_detect([])
-    )
+    monkeypatch.setattr("auntiepypi.cli._commands.overview.detect_all", _stub_detect([]))
     rc = main(["overview", "alpha", "--json"])
     assert rc == 0
     payload = json.loads(capsys.readouterr().out)
@@ -185,9 +171,7 @@ def test_target_resolves_to_package(composite_env, capsys, monkeypatch) -> None:
 
 
 def test_unknown_target_zero_target_report(composite_env, capsys, monkeypatch) -> None:
-    monkeypatch.setattr(
-        "auntiepypi.cli._commands.overview.detect_all", _stub_detect([])
-    )
+    monkeypatch.setattr("auntiepypi.cli._commands.overview.detect_all", _stub_detect([]))
     rc = main(["overview", "i-am-not-real", "--json"])
     assert rc == 0
     payload = json.loads(capsys.readouterr().out)
@@ -198,9 +182,7 @@ def test_unknown_target_zero_target_report(composite_env, capsys, monkeypatch) -
 def test_no_arg_without_packages_config(tmp_path, monkeypatch, capsys) -> None:
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(
-        "auntiepypi.cli._commands.overview.detect_all", _stub_detect([])
-    )
+    monkeypatch.setattr("auntiepypi.cli._commands.overview.detect_all", _stub_detect([]))
     rc = main(["overview", "--json"])
     assert rc == 0
     captured = capsys.readouterr()
@@ -240,16 +222,14 @@ def test_default_scan_processes_false_when_no_config(tmp_path, monkeypatch, caps
 
 def test_malformed_servers_config_exits_user_error(tmp_path, monkeypatch, capsys) -> None:
     """Malformed [[tool.auntiepypi.servers]] -> exit 1 with a hint."""
-    (tmp_path / "pyproject.toml").write_text(
-        """\
+    (tmp_path / "pyproject.toml").write_text("""\
 [tool.auntiepypi]
 packages = ["x"]
 
 [[tool.auntiepypi.servers]]
 flavor = "pypiserver"
 port = 8080
-"""
-    )
+""")
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.chdir(tmp_path)
     rc = main(["overview", "--json"])

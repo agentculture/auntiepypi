@@ -133,7 +133,8 @@ def test_fingerprint_unknown_when_body_none() -> None:
 def test_detect_emits_absent_for_closed_default_ports(monkeypatch) -> None:
     """When DEFAULT_PORTS aren't listening, scan emits absent detections."""
     monkeypatch.setattr(
-        "auntiepypi._detect._port.DEFAULT_PORTS", (_free_port(), _free_port()),
+        "auntiepypi._detect._port.DEFAULT_PORTS",
+        (_free_port(), _free_port()),
     )
     detections = detect(declared=[], scan_processes=False)
     assert all(isinstance(d, Detection) for d in detections)

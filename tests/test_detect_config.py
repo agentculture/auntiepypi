@@ -6,8 +6,8 @@ import pytest
 
 from auntiepypi._detect._config import (
     ServerConfigError,
-    ServerSpec,
     ServersConfig,
+    ServerSpec,
     load_servers,
 )
 
@@ -58,7 +58,10 @@ unit = "devpi.service"
     cfg = load_servers()
     assert len(cfg.specs) == 2
     assert cfg.specs[0] == ServerSpec(
-        name="main", flavor="pypiserver", host="127.0.0.1", port=8080,
+        name="main",
+        flavor="pypiserver",
+        host="127.0.0.1",
+        port=8080,
     )
     assert cfg.specs[1].name == "dev"
     assert cfg.specs[1].managed_by == "systemd-user"

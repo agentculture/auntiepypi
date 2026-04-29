@@ -69,7 +69,7 @@ def test_light_mapping_for_absent() -> None:
 
 from unittest.mock import patch  # noqa: E402
 
-from auntiepypi._detect._config import ServerSpec, ServersConfig  # noqa: E402
+from auntiepypi._detect._config import ServersConfig, ServerSpec  # noqa: E402
 from auntiepypi._detect._runtime import detect_all  # noqa: E402
 
 
@@ -100,9 +100,11 @@ def test_detect_all_empty_config_runs_port_scan_only() -> None:
     def fake_proc(declared, *, scan_processes, **kw):
         return []
 
-    with patch("auntiepypi._detect._runtime._declared_detect", fake_declared), patch(
-        "auntiepypi._detect._runtime._port_detect", fake_port
-    ), patch("auntiepypi._detect._runtime._proc_detect", fake_proc):
+    with (
+        patch("auntiepypi._detect._runtime._declared_detect", fake_declared),
+        patch("auntiepypi._detect._runtime._port_detect", fake_port),
+        patch("auntiepypi._detect._runtime._proc_detect", fake_proc),
+    ):
         result = detect_all(cfg)
     assert len(result) == 1
     assert result[0].source == "port"
@@ -117,11 +119,11 @@ def test_detect_all_augment_suppresses_absent_from_scan_when_declared_exists() -
         _det("devpi:3141", 3141, "port", status="absent", flavor="unknown"),
     ]
 
-    with patch(
-        "auntiepypi._detect._runtime._declared_detect", lambda *a, **kw: declared_results
-    ), patch(
-        "auntiepypi._detect._runtime._port_detect", lambda *a, **kw: port_results
-    ), patch("auntiepypi._detect._runtime._proc_detect", lambda *a, **kw: []):
+    with (
+        patch("auntiepypi._detect._runtime._declared_detect", lambda *a, **kw: declared_results),
+        patch("auntiepypi._detect._runtime._port_detect", lambda *a, **kw: port_results),
+        patch("auntiepypi._detect._runtime._proc_detect", lambda *a, **kw: []),
+    ):
         result = detect_all(cfg)
     sources = [d.source for d in result]
     assert "declared" in sources
@@ -136,11 +138,11 @@ def test_detect_all_keeps_port_scan_finds_when_declared_exists() -> None:
     declared_results = [_det("main", 3141, "declared", flavor="devpi")]
     port_results = [_det("pypiserver:8080", 8080, "port", status="up")]
 
-    with patch(
-        "auntiepypi._detect._runtime._declared_detect", lambda *a, **kw: declared_results
-    ), patch(
-        "auntiepypi._detect._runtime._port_detect", lambda *a, **kw: port_results
-    ), patch("auntiepypi._detect._runtime._proc_detect", lambda *a, **kw: []):
+    with (
+        patch("auntiepypi._detect._runtime._declared_detect", lambda *a, **kw: declared_results),
+        patch("auntiepypi._detect._runtime._port_detect", lambda *a, **kw: port_results),
+        patch("auntiepypi._detect._runtime._proc_detect", lambda *a, **kw: []),
+    ):
         result = detect_all(cfg)
     sources = {d.source for d in result}
     assert sources == {"declared", "port"}
@@ -152,9 +154,11 @@ def test_detect_all_proc_enriches_existing_detection_with_pid() -> None:
     port_d = _det("pypiserver:8080", 8080, "port", status="up")
     proc_d = _det("pypiserver:8080", 8080, "proc", status="up", pid=1234)
 
-    with patch("auntiepypi._detect._runtime._declared_detect", lambda *a, **kw: []), patch(
-        "auntiepypi._detect._runtime._port_detect", lambda *a, **kw: [port_d]
-    ), patch("auntiepypi._detect._runtime._proc_detect", lambda *a, **kw: [proc_d]):
+    with (
+        patch("auntiepypi._detect._runtime._declared_detect", lambda *a, **kw: []),
+        patch("auntiepypi._detect._runtime._port_detect", lambda *a, **kw: [port_d]),
+        patch("auntiepypi._detect._runtime._proc_detect", lambda *a, **kw: [proc_d]),
+    ):
         result = detect_all(cfg)
     assert len(result) == 1
     assert result[0].pid == 1234
@@ -165,9 +169,11 @@ def test_detect_all_proc_only_finds_appended() -> None:
     cfg = ServersConfig(specs=(), scan_processes=True)
     proc_d = _det("pypiserver:9001", 9001, "proc", pid=999)
 
-    with patch("auntiepypi._detect._runtime._declared_detect", lambda *a, **kw: []), patch(
-        "auntiepypi._detect._runtime._port_detect", lambda *a, **kw: []
-    ), patch("auntiepypi._detect._runtime._proc_detect", lambda *a, **kw: [proc_d]):
+    with (
+        patch("auntiepypi._detect._runtime._declared_detect", lambda *a, **kw: []),
+        patch("auntiepypi._detect._runtime._port_detect", lambda *a, **kw: []),
+        patch("auntiepypi._detect._runtime._proc_detect", lambda *a, **kw: [proc_d]),
+    ):
         result = detect_all(cfg)
     assert len(result) == 1
     assert result[0].source == "proc"

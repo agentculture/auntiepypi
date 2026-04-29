@@ -2762,7 +2762,7 @@ ENTRIES: dict[tuple[str, ...], str] = {
 }
 ```
 
-Note: keep `_LEARN`, `_EXPLAIN`, `_DOCTOR`, `_WHOAMI`, `_PACKAGES`, `_PACKAGES_OVERVIEW` literals as-is *except* swap `auntiepypi ` for `auntie ` in the prose where the verb is named (e.g. "Usage: `auntiepypi learn`" → "Usage: `auntie learn`"). Use Edit's `replace_all=true` against each literal individually for safety.
+Note: keep `_LEARN`, `_EXPLAIN`, `_DOCTOR`, `_WHOAMI`, `_PACKAGES`, `_PACKAGES_OVERVIEW` literals as-is *except* swap the prose `auntiepypi <verb>` for `auntie <verb>` where the verb is named (e.g. "Usage: auntiepypi learn" → "Usage: auntie learn"). Use Edit's `replace_all=true` against each literal individually for safety.
 
 - [ ] **Step 4: Update tests if any reference the old strings**
 

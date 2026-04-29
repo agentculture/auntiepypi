@@ -17,8 +17,8 @@ from __future__ import annotations
 
 from auntiepypi._detect._config import (
     ServerConfigError,
-    ServerSpec,
     ServersConfig,
+    ServerSpec,
     load_servers,
 )
 from auntiepypi._detect._detection import Detection

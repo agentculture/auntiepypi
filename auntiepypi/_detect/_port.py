@@ -34,7 +34,8 @@ def fingerprint_flavor(body: bytes | None, content_type: str | None) -> str:
     if content_type and "json" in content_type.lower():
         try:
             data = json.loads(body)
-        except (ValueError, UnicodeDecodeError):
+        except ValueError:
+            # ValueError covers both JSONDecodeError and UnicodeDecodeError here.
             data = None
         if isinstance(data, dict) and "resources" in data:
             return "devpi"
@@ -111,13 +112,9 @@ def detect(
     """Probe ``DEFAULT_PORTS`` on localhost; skip any ``(host, port)`` in ``covered``."""
     del declared, scan_processes  # signature parity; not used here
     skip = covered or set()
-    targets = [
-        (_DEFAULT_HOST, p) for p in DEFAULT_PORTS if (_DEFAULT_HOST, p) not in skip
-    ]
+    targets = [(_DEFAULT_HOST, p) for p in DEFAULT_PORTS if (_DEFAULT_HOST, p) not in skip]
     if not targets:
         return []
     with ThreadPoolExecutor(max_workers=8) as ex:
-        outcomes = list(
-            ex.map(lambda hp: probe_endpoint(hp[0], hp[1], timeout=_TIMEOUT), targets)
-        )
+        outcomes = list(ex.map(lambda hp: probe_endpoint(hp[0], hp[1], timeout=_TIMEOUT), targets))
     return [_detection_for(host, port, o) for (host, port), o in zip(targets, outcomes)]

@@ -24,13 +24,13 @@ from auntiepypi._detect._proc import detect as _proc_detect
 
 def detect_all(config: ServersConfig) -> list[Detection]:
     """Run all detectors and merge results."""
-    declared_results = _declared_detect(
-        config.specs, scan_processes=config.scan_processes
-    )
+    declared_results = _declared_detect(config.specs, scan_processes=config.scan_processes)
     covered: set[tuple[str, int]] = {(d.host, d.port) for d in declared_results}
 
     port_results = _port_detect(
-        config.specs, scan_processes=config.scan_processes, covered=covered,
+        config.specs,
+        scan_processes=config.scan_processes,
+        covered=covered,
     )
     if declared_results:
         port_results = [d for d in port_results if d.status != "absent"]
@@ -41,18 +41,15 @@ def detect_all(config: ServersConfig) -> list[Detection]:
         return detections
 
     proc_results = _proc_detect(
-        config.specs, scan_processes=config.scan_processes,
+        config.specs,
+        scan_processes=config.scan_processes,
     )
     return _merge_proc(detections, proc_results)
 
 
-def _merge_proc(
-    base: list[Detection], proc_results: list[Detection]
-) -> list[Detection]:
+def _merge_proc(base: list[Detection], proc_results: list[Detection]) -> list[Detection]:
     """Enrich ``base`` with PIDs from ``proc_results``; append proc-only finds."""
-    by_endpoint: dict[tuple[str, int], int] = {
-        (d.host, d.port): i for i, d in enumerate(base)
-    }
+    by_endpoint: dict[tuple[str, int], int] = {(d.host, d.port): i for i, d in enumerate(base)}
     appended: list[Detection] = []
     for p in proc_results:
         key = (p.host, p.port)

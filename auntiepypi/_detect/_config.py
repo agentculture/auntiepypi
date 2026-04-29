@@ -29,9 +29,7 @@ from pathlib import Path
 from auntiepypi._packages_config import find_pyproject
 
 _VALID_FLAVORS = frozenset({"pypiserver", "devpi", "unknown"})
-_VALID_MANAGED_BY = frozenset(
-    {"systemd-user", "docker", "compose", "command", "manual"}
-)
+_VALID_MANAGED_BY = frozenset({"systemd-user", "docker", "compose", "command", "manual"})
 
 
 class ServerConfigError(Exception):
@@ -92,9 +90,7 @@ def _validate_required_strings(entry: dict, idx: int) -> tuple[str, str]:
         )
     flavor = entry.get("flavor")
     if not isinstance(flavor, str):
-        raise ServerConfigError(
-            f"[[tool.auntiepypi.servers]][{idx}] {name!r}: missing 'flavor'"
-        )
+        raise ServerConfigError(f"[[tool.auntiepypi.servers]][{idx}] {name!r}: missing 'flavor'")
     if flavor not in _VALID_FLAVORS:
         raise ServerConfigError(
             f"[[tool.auntiepypi.servers]][{idx}] {name!r}: invalid 'flavor': "
@@ -105,9 +101,7 @@ def _validate_required_strings(entry: dict, idx: int) -> tuple[str, str]:
 
 def _validate_port(entry: dict, name: str, idx: int) -> int:
     if "port" not in entry:
-        raise ServerConfigError(
-            f"[[tool.auntiepypi.servers]][{idx}] {name!r}: missing 'port'"
-        )
+        raise ServerConfigError(f"[[tool.auntiepypi.servers]][{idx}] {name!r}: missing 'port'")
     port = entry["port"]
     if not isinstance(port, int) or isinstance(port, bool) or not 1 <= port <= 65535:
         raise ServerConfigError(
@@ -131,9 +125,7 @@ def _validate_managed_by(entry: dict, name: str, idx: int) -> str | None:
 
 def _parse_spec(entry: object, idx: int) -> ServerSpec:
     if not isinstance(entry, dict):
-        raise ServerConfigError(
-            f"[[tool.auntiepypi.servers]][{idx}] is not a table"
-        )
+        raise ServerConfigError(f"[[tool.auntiepypi.servers]][{idx}] is not a table")
     name, flavor = _validate_required_strings(entry, idx)
     port = _validate_port(entry, name, idx)
     host = entry.get("host", "127.0.0.1")
@@ -159,9 +151,7 @@ def _validate_unique_names(specs: tuple[ServerSpec, ...]) -> None:
     seen: set[str] = set()
     for s in specs:
         if s.name in seen:
-            raise ServerConfigError(
-                f"[[tool.auntiepypi.servers]]: duplicate name {s.name!r}"
-            )
+            raise ServerConfigError(f"[[tool.auntiepypi.servers]]: duplicate name {s.name!r}")
         seen.add(s.name)
 
 

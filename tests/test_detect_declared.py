@@ -46,9 +46,7 @@ def test_empty_declared_returns_empty() -> None:
 
 
 def test_declared_absent_when_nothing_listens() -> None:
-    spec = ServerSpec(
-        name="main", flavor="pypiserver", host="127.0.0.1", port=_free_port()
-    )
+    spec = ServerSpec(name="main", flavor="pypiserver", host="127.0.0.1", port=_free_port())
     detections = detect(declared=[spec], scan_processes=False)
     assert len(detections) == 1
     d = detections[0]

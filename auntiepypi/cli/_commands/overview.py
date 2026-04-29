@@ -65,9 +65,7 @@ def _try_package_target(target: str) -> dict | None:
     return _deep_dive(target, pypi, stats)
 
 
-def _detection_target(
-    detections: list[Detection], target: str
-) -> Detection | None:
+def _detection_target(detections: list[Detection], target: str) -> Detection | None:
     """Return the matching Detection or None.
 
     Resolution priority:
@@ -89,9 +87,7 @@ def _composite_no_arg(json_mode: bool, detections: list[Detection]) -> int:
         names = load_package_names()
     except ConfigError:
         names = []
-        emit_diagnostic(
-            "warning: no [tool.auntiepypi].packages configured; showing servers only"
-        )
+        emit_diagnostic("warning: no [tool.auntiepypi].packages configured; showing servers only")
     if names:
         payload, warnings, _failures = _dashboard(names)
         for w in warnings:
@@ -105,9 +101,7 @@ def _composite_no_arg(json_mode: bool, detections: list[Detection]) -> int:
 
 def cmd_overview(args: argparse.Namespace) -> int:
     json_mode = bool(getattr(args, "json", False))
-    cfg = _load_config_or_raise(
-        scan_processes_override=bool(getattr(args, "proc", False))
-    )
+    cfg = _load_config_or_raise(scan_processes_override=bool(getattr(args, "proc", False)))
     detections = detect_all(cfg)
     target = args.target if args.target else None
 
