@@ -10,6 +10,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Changed
 
 - Renamed package to `auntiepypi` (PyPI distribution name + import path). Old `agentpypi` project on pypi.org is left at 0.1.5; downstream consumers must re-pin.
+- `.github/workflows/publish.yml` aligned with the `afi-cli` shape: TestPyPI on PR (`test-publish`, dev versions `<base>.dev<run>`), PyPI on push to main (`publish`). Removed the bespoke `smoke-source` and `smoke-installed` jobs that this repo had added on top of the canonical sibling pattern.
 
 ## [0.1.5] - 2026-04-29
 
