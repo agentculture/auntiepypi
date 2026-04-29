@@ -93,9 +93,8 @@ def test_probe_outcome_url_field(http_server) -> None:
 
     host, port = http_server(H)
     out = probe_endpoint(host, port, timeout=2.0, path="/foo")
-    # NOSONAR python:S5332 — synthetic localhost probe URL; never dereferenced
-    # over a real network. Production code path is auntiepypi/_detect/_http.py.
-    assert out.url == f"http://{host}:{port}/foo"
+    # Synthetic localhost probe URL; never dereferenced over a real network.
+    assert out.url == f"http://{host}:{port}/foo"  # NOSONAR S5332
 
 
 # ----- Task 4: scanner + fingerprint -----

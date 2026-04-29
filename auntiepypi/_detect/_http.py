@@ -51,11 +51,9 @@ def probe_endpoint(
     Returns a :class:`ProbeOutcome` with the TCP/HTTP results. Never
     raises — every failure mode maps onto a field.
     """
-    # NOSONAR python:S5332 — probing localhost PyPI servers; HTTPS is not the
-    # protocol these servers speak (`pypi-server`, `devpi-server` default to
-    # plain HTTP for in-mesh use). We never dereference this for transport
-    # outside the local box.
-    url = f"http://{host}:{port}{path}"  # noqa: S310  # nosec B310
+    # `pypi-server` and `devpi-server` default to plain HTTP on localhost;
+    # HTTPS is not the protocol these servers speak in their default config.
+    url = f"http://{host}:{port}{path}"  # noqa: S310  # nosec B310 NOSONAR S5332
     if not _tcp_open(host, port, timeout):
         return ProbeOutcome(url=url, tcp_open=False, http_status=None, body=None, error=None)
     req = urllib.request.Request(url, headers={"User-Agent": _USER_AGENT, "Accept": "*/*"})
