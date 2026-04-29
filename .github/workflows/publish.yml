@@ -38,7 +38,7 @@ jobs:
         run: uv build
       - name: Install built wheel into clean venv
         run: |
-          uv venv /tmp/smoke --python 3.12
+          uv venv /tmp/smoke --python 3.12 --seed
           /tmp/smoke/bin/python -m pip install --quiet dist/*.whl
       - name: Smoke — version + packages overview against pypi.org
         run: |
@@ -120,7 +120,7 @@ jobs:
         run: |
           VERSION=$(uv run python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
           rm -rf /tmp/postsmoke
-          uv venv /tmp/postsmoke --python 3.12
+          uv venv /tmp/postsmoke --python 3.12 --seed
           /tmp/postsmoke/bin/python -m pip install --quiet "agentpypi==$VERSION"
           /tmp/postsmoke/bin/agentpypi --version
           /tmp/postsmoke/bin/agentpypi packages overview requests --json | /tmp/postsmoke/bin/python -m json.tool
