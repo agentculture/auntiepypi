@@ -36,3 +36,13 @@ def roll_up(results: Iterable[DimensionResult]) -> str:
     if warn_or_unknown >= 2:
         return LIGHT_YELLOW
     return LIGHT_GREEN
+
+
+def evaluate_package(
+    pypi: dict | None,
+    stats: dict | None,
+) -> list[DimensionResult]:
+    """Run every dimension over the two source dicts. Iteration order = registry order."""
+    from agentpypi._rubric import DIMENSIONS
+
+    return [d.evaluate(pypi, stats) for d in DIMENSIONS]

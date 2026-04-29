@@ -7,5 +7,23 @@ in this order.
 
 from __future__ import annotations
 
-# Filled in once individual dimensions land (Tasks 8-14).
-DIMENSIONS: tuple = ()
+from agentpypi._rubric._dimension import Dimension, DimensionResult, Score
+from agentpypi._rubric.cadence import DIMENSION as cadence
+from agentpypi._rubric.distribution import DIMENSION as distribution
+from agentpypi._rubric.downloads import DIMENSION as downloads
+from agentpypi._rubric.lifecycle import DIMENSION as lifecycle
+from agentpypi._rubric.metadata import DIMENSION as metadata
+from agentpypi._rubric.recency import DIMENSION as recency
+from agentpypi._rubric.versioning import DIMENSION as versioning
+
+DIMENSIONS: tuple[Dimension, ...] = (
+    recency,
+    cadence,
+    downloads,
+    lifecycle,
+    distribution,
+    metadata,
+    versioning,
+)
+
+__all__ = ["DIMENSIONS", "Dimension", "DimensionResult", "Score"]
