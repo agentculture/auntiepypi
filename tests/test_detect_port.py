@@ -162,7 +162,7 @@ def test_detect_finds_running_pypiserver(http_server, monkeypatch) -> None:
             self.end_headers()
             self.wfile.write(b'<a href="alpha/">alpha</a>')
 
-    host, port = http_server(H)
+    _host, port = http_server(H)
     monkeypatch.setattr("auntiepypi._detect._port.DEFAULT_PORTS", (port,))
     detections = detect(declared=[], scan_processes=False)
     assert len(detections) == 1
