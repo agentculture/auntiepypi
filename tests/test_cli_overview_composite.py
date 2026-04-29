@@ -1,4 +1,4 @@
-"""Tests for the composite `agentpypi overview` (packages + servers)."""
+"""Tests for the composite `auntiepypi overview` (packages + servers)."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import json
 
 import pytest
 
-from agentpypi.cli import main
+from auntiepypi.cli import main
 
 
 def _good_pypi(name="x"):
@@ -31,10 +31,10 @@ def _good_pypi(name="x"):
 @pytest.fixture
 def composite_env(tmp_path, monkeypatch):
     """Patch the consumer module's local bindings."""
-    target = "agentpypi.cli._commands._packages.overview"
+    target = "auntiepypi.cli._commands._packages.overview"
     monkeypatch.setattr(f"{target}.fetch_pypi", lambda pkg: _good_pypi(pkg))
     monkeypatch.setattr(f"{target}.fetch_pypistats", lambda pkg: {"data": {"last_week": 100}})
-    (tmp_path / "pyproject.toml").write_text('[tool.agentpypi]\npackages = ["alpha"]\n')
+    (tmp_path / "pyproject.toml").write_text('[tool.auntiepypi]\npackages = ["alpha"]\n')
     monkeypatch.chdir(tmp_path)
 
 
@@ -75,7 +75,7 @@ def test_with_unknown_target_zero_target_report(composite_env, capsys):
 
 
 def test_no_arg_without_packages_config_emits_servers_only(tmp_path, monkeypatch, capsys):
-    """When no [tool.agentpypi].packages is configured, composite emits only servers."""
+    """When no [tool.auntiepypi].packages is configured, composite emits only servers."""
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.chdir(tmp_path)
     rc = main(["overview", "--json"])
@@ -84,7 +84,7 @@ def test_no_arg_without_packages_config_emits_servers_only(tmp_path, monkeypatch
     payload = json.loads(captured.out)
     cats = {s["category"] for s in payload["sections"]}
     assert cats == {"servers"}
-    assert "no [tool.agentpypi].packages" in captured.err
+    assert "no [tool.auntiepypi].packages" in captured.err
 
 
 def test_pkg_target_without_config_falls_through_to_zero_target(tmp_path, monkeypatch, capsys):
@@ -100,7 +100,7 @@ def test_pkg_target_without_config_falls_through_to_zero_target(tmp_path, monkey
 
 def test_server_target_with_detail_field(monkeypatch, tmp_path, capsys):
     """probe_status returning a detail key should populate a detail field."""
-    from agentpypi.cli._commands import overview as overview_mod
+    from auntiepypi.cli._commands import overview as overview_mod
 
     fake_probe = {
         "name": "devpi",

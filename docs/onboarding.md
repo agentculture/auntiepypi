@@ -33,7 +33,7 @@ files themselves; the standalone setup walk-through has been retired.
 `afi-cli` is the agent-first CLI scaffolder this repo is built from.
 Ran `afi cli cite .`, read the emitted `AGENT.md`, and applied the
 stable-contract / shape-adapt split. Produced the package layout
-(`agentpypi/`, `agentpypi/cli/`, `tests/`) that `CLAUDE.md` requires.
+(`auntiepypi/`, `auntiepypi/cli/`, `tests/`) that `CLAUDE.md` requires.
 
 → See `./afi-setup.md`.
 
@@ -51,7 +51,7 @@ step needs Trusted Publishing in place.
 
 ```bash
 cd ../steward
-uv run steward doctor --scope self ../agentpypi
+uv run steward doctor --scope self ../auntiepypi
 ```
 
 Exit 0 with no findings means portability + skills-convention are
@@ -65,9 +65,9 @@ file as advisory — corpus mode never blocks.
 The "do not implement yet" hold ended with the v0.0.1 PR, which
 brainstormed the noun set with `superpowers:brainstorming` before any
 code landed. The brainstorm output is preserved under
-`./superpowers/specs/2026-04-28-agentpypi-v0.0.1-design.md`. v0.1.0
+`./superpowers/specs/2026-04-28-auntiepypi-v0.0.1-design.md`. v0.1.0
 followed under
-`./superpowers/specs/2026-04-29-agentpypi-packages-overview-design.md`.
+`./superpowers/specs/2026-04-29-auntiepypi-packages-overview-design.md`.
 
 ## Where v0.2.0 starts
 

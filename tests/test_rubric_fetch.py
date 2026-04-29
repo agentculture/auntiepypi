@@ -13,7 +13,7 @@ from typing import Iterator
 
 import pytest
 
-from agentpypi._rubric._fetch import FetchError, get_json
+from auntiepypi._rubric._fetch import FetchError, get_json
 
 
 def _handler_for(
@@ -104,5 +104,5 @@ def test_user_agent_sent():
     for url in _serve(CaptureHandler):
         get_json(url + "/x")
 
-    assert received_ua["ua"].startswith("agentpypi/")
-    assert "github.com/agentculture/agentpypi" in received_ua["ua"]
+    assert received_ua["ua"].startswith("auntiepypi/")
+    assert "github.com/agentculture/auntiepypi" in received_ua["ua"]

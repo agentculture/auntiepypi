@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from agentpypi._rubric import metadata
-from agentpypi._rubric._dimension import Score
+from auntiepypi._rubric import metadata
+from auntiepypi._rubric._dimension import Score
 
 
 def _info(**kwargs) -> dict:

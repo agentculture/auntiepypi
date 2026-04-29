@@ -5,8 +5,8 @@ from __future__ import annotations
 import socket
 from typing import Callable
 
-from agentpypi._probes import PROBES, devpi, probe_status, pypiserver
-from agentpypi._probes._probe import Probe
+from auntiepypi._probes import PROBES, devpi, probe_status, pypiserver
+from auntiepypi._probes._probe import Probe
 
 
 def _free_port() -> int:

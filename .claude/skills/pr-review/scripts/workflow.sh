@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# agentpypi pr-review workflow entry point.
+# auntiepypi pr-review workflow entry point.
 #
 # Subcommands:
 #   lint              run the portability lint on the current diff (staged + unstaged)

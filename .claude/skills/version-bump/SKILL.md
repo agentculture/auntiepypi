@@ -55,7 +55,7 @@ Pass via stdin. All fields are optional — only non-empty sections are rendered
 ## What it touches
 
 - `pyproject.toml` — the `version = "x.y.z"` field (single source of truth;
-  `agentpypi/__init__.py` reads it via `importlib.metadata`, so there's no
+  `auntiepypi/__init__.py` reads it via `importlib.metadata`, so there's no
   separate `__version__` literal to keep in sync).
 - `CHANGELOG.md` — inserts a new `## [x.y.z] - YYYY-MM-DD` entry at the top.
 

@@ -1,6 +1,6 @@
-# About agentpypi
+# About auntiepypi
 
-agentpypi is both a CLI and an agent that maintains, uses, and serves
+auntiepypi is both a CLI and an agent that maintains, uses, and serves
 the CLI for managing PyPI packages. It supports remote (pypi.org) today
 and local (mesh-hosted) indexes in future milestones. It overviews
 packages — informational, not gating.
@@ -16,14 +16,14 @@ its own opinions of "good enough".
 
 Two things, both read-only:
 
-1. **Dashboard.** Run `agentpypi packages overview` and you get a
+1. **Dashboard.** Run `auntiepypi packages overview` and you get a
    one-row-per-package summary of every package listed in your repo's
-   `[tool.agentpypi].packages` block. Each row shows the current
+   `[tool.auntiepypi].packages` block. Each row shows the current
    version, the index it lives on (currently always pypi.org), how long
    ago it was released, and last-week download count. A traffic light
    sums up seven maturity signals.
 
-2. **Deep-dive.** Run `agentpypi packages overview <pkg>` for any
+2. **Deep-dive.** Run `auntiepypi packages overview <pkg>` for any
    package on PyPI — yours or anyone else's — and you get the seven
    signals broken out: recency of releases, cadence between them,
    download volume, Trove lifecycle classifier, distribution
@@ -31,7 +31,7 @@ Two things, both read-only:
    maturity. See `maturity-rubric.md` for the green/yellow/red
    thresholds each signal applies.
 
-The same machinery feeds the top-level `agentpypi overview`, which
+The same machinery feeds the top-level `auntiepypi overview`, which
 composes the packages dashboard with a `servers` section that probes
 local PyPI flavors (devpi, pypiserver) — one read for "what's going on
 with my packages and my local servers right now".
@@ -53,8 +53,8 @@ useful.
 The composite `overview` already *probes* local servers; v0.2.0 adds
 the write-side machinery for actually running them.
 
-- v0.2.0 — local in-mesh PyPI index. `agentpypi local serve` /
-  `upload` / `mirror`, plus an `agentpypi servers …` lifecycle noun
+- v0.2.0 — local in-mesh PyPI index. `auntiepypi local serve` /
+  `upload` / `mirror`, plus an `auntiepypi servers …` lifecycle noun
   (start/stop/list/diagnose). The dashboard's `index` column starts
   showing local mesh URLs for packages you host in-house.
 - Later — release orchestration (trigger sibling `publish.yml`

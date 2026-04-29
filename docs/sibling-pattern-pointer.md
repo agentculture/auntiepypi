@@ -1,6 +1,6 @@
 # Sibling pattern — pointer
 
-agentpypi follows the AgentCulture sibling pattern enforced by
+auntiepypi follows the AgentCulture sibling pattern enforced by
 `steward doctor`. The canonical artifact list and the machine-checkable
 invariants live in **`../steward/docs/sibling-pattern.md`** — read that
 file rather than re-quoting it here.
@@ -15,9 +15,9 @@ the corpus as of the last run, not a frozen contract.
 
 The artifact list and invariants change as the mesh evolves
 (`changelog-format`, `lint-config-local`, etc. are listed `(planned)`
-in steward today). Vendoring the list into agentpypi would make the
+in steward today). Vendoring the list into auntiepypi would make the
 two drift the moment steward tightens. The agreement here is: **steward
-owns the contract; agentpypi reads it from steward**.
+owns the contract; auntiepypi reads it from steward**.
 
 If steward ever moves the canonical contract elsewhere (e.g. publishes
 `sibling-pattern.json` for machine consumption), update this pointer —
@@ -29,7 +29,7 @@ Self-scope (single-repo invariants — portability + skills-convention):
 
 ```bash
 cd ../steward
-uv run steward doctor --scope self ../agentpypi
+uv run steward doctor --scope self ../auntiepypi
 ```
 
 - Exit 0 + no findings: invariants pass.
@@ -48,15 +48,15 @@ This walks every `culture.yaml` in the workspace, regenerates
 into `<target>/docs/steward/steward-suggestions.md` (gated by a marker
 line so any hand-written content there is preserved).
 
-agentpypi's `culture.yaml` landed at v0.0.1 (see repo root), so
+auntiepypi's `culture.yaml` landed at v0.0.1 (see repo root), so
 `--scope siblings` includes this repo today.
 
 ## On `culture.yaml`
 
 `culture.yaml` declares an agent to the Culture mesh; it is **not**
 required for every sibling. Steward itself doesn't have one — it's a
-CLI/tools repo, not a Culture-managed resident agent. agentpypi shipped
-`culture.yaml` at v0.0.1 because agentpypi *will* run as a
+CLI/tools repo, not a Culture-managed resident agent. auntiepypi shipped
+`culture.yaml` at v0.0.1 because auntiepypi *will* run as a
 mesh-resident process (the local PyPI index listens on the mesh, once
 v0.2.0 lands `local serve`). It was modelled after
 `../daria/culture.yaml` and `../shushu/culture.yaml` — keep changes

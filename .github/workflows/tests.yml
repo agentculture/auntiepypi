@@ -16,7 +16,7 @@ jobs:
       - uses: astral-sh/setup-uv@38f3f104447c67c051c4a08e39b64a148898af3a # v4
       - run: uv python install 3.12
       - run: uv sync
-      - run: uv run pytest -n auto --cov=agentpypi --cov-report=xml:coverage.xml --cov-report=term -v
+      - run: uv run pytest -n auto --cov=auntiepypi --cov-report=xml:coverage.xml --cov-report=term -v
 
   lint:
     runs-on: ubuntu-latest
@@ -31,15 +31,15 @@ jobs:
       - run: uv python install 3.12
       - run: uv sync
       - name: black --check
-        run: uv run black --check agentpypi tests
+        run: uv run black --check auntiepypi tests
       - name: isort --check
-        run: uv run isort --check-only agentpypi tests
+        run: uv run isort --check-only auntiepypi tests
       - name: flake8
-        run: uv run flake8 agentpypi tests
+        run: uv run flake8 auntiepypi tests
       - name: pylint --errors-only
-        run: uv run pylint --errors-only agentpypi
+        run: uv run pylint --errors-only auntiepypi
       - name: bandit
-        run: uv run bandit -c pyproject.toml -r agentpypi
+        run: uv run bandit -c pyproject.toml -r auntiepypi
       - name: markdownlint-cli2
         run: |
           npm install -g markdownlint-cli2@0.21.0

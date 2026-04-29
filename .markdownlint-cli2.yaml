@@ -1,4 +1,4 @@
-# markdownlint-cli2 config for agentpypi.
+# markdownlint-cli2 config for auntiepypi.
 # markdownlint-cli2 stops walking at the git root, so a per-user global
 # config in the home directory isn't picked up from inside the repo.
 # Mirrors the afi-cli / cfafi / steward preset for workspace consistency.

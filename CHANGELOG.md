@@ -5,11 +5,17 @@ All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-04-29
+
+### Changed
+
+- Renamed package to `auntiepypi` (PyPI distribution name + import path). Old `agentpypi` project on pypi.org is left at 0.1.5; downstream consumers must re-pin.
+
 ## [0.1.5] - 2026-04-29
 
 ### Added
 
-- docs/maturity-rubric.md — single-page reference for the seven packages-overview signals with green/yellow/red thresholds derived from agentpypi/_rubric/.
+- docs/maturity-rubric.md — single-page reference for the seven packages-overview signals with green/yellow/red thresholds derived from auntiepypi/_rubric/.
 
 ### Changed
 
@@ -51,10 +57,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
-- `agentpypi packages overview [PKG]` — read-only PyPI maturity dashboard / deep-dive (informational, not gating).
-- Top-level `agentpypi overview` promoted to composite of `packages` + `servers` sections.
+- `auntiepypi packages overview [PKG]` — read-only PyPI maturity dashboard / deep-dive (informational, not gating).
+- Top-level `auntiepypi overview` promoted to composite of `packages` + `servers` sections.
 - `_rubric/` plugin point (parallels `_probes/`) with seven dimensions: recency, cadence, downloads, lifecycle, distribution, metadata, versioning.
-- `[tool.agentpypi].packages` config block in `pyproject.toml`.
+- `[tool.auntiepypi].packages` config block in `pyproject.toml`.
 - `@pytest.mark.live` opt-in network suite + CI wiring (soft on PR, blocking on main).
 - Pre/post-deploy smoke jobs in `publish.yml`.
 - `docs/about.md` — non-technical explainer.
@@ -92,14 +98,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Vendored steward skills (`version-bump`, `pr-review`) under
   `.claude/skills/`. `.claude/skills.local.yaml.example` template +
   `docs/skill-sources.md` upstream tracker.
-- AFI scaffold applied: `agentpypi/cli/{_errors,_output}.py` (stable
-  contract), `agentpypi/cli/__init__.py` (`_ArgumentParser` override +
-  `_dispatch`), `agentpypi/explain/{__init__,catalog}.py` (catalog
+- AFI scaffold applied: `auntiepypi/cli/{_errors,_output}.py` (stable
+  contract), `auntiepypi/cli/__init__.py` (`_ArgumentParser` override +
+  `_dispatch`), `auntiepypi/explain/{__init__,catalog}.py` (catalog
   resolver + entries for every registered verb plus planned
   online/local nouns).
 - Five verbs: `learn`, `explain`, `overview`, `doctor` (`--fix`-gated),
   `whoami`. All support `--json`. Mutating verbs default to dry-run.
-- `agentpypi/_probes/` — uniform interface for known PyPI server
+- `auntiepypi/_probes/` — uniform interface for known PyPI server
   flavors (devpi:3141 `/+api`, pypiserver:8080 `/`); two-stage runtime
   probe (TCP then HTTP) distinguishes up/down/absent.
 - Tests: 32 tests across `test_cli`, `test_probes`, `test_overview`,
@@ -110,7 +116,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Publishing).
 - Pre-commit hooks: black, isort, flake8 (+ bugbear, bandit), bandit -r,
   markdownlint-cli2 (check), portability-lint.
-- `culture.yaml` registering agentpypi as a Culture-mesh agent.
+- `culture.yaml` registering auntiepypi as a Culture-mesh agent.
 
 ### Notes
 
@@ -118,7 +124,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   as argparse subcommands. Calling them fails with `error: invalid
   choice` + a `hint:` line. Implementations land in v0.1.0 (`online`)
   and v0.2.0 (`local`).
-- AFI rubric `overview_cli_noun_exists` check fails for agentpypi
+- AFI rubric `overview_cli_noun_exists` check fails for auntiepypi
   because the project has no `cli` noun (its nouns are `online` /
   `local`). Accepted structural deviation; documented in
-  `docs/superpowers/specs/2026-04-28-agentpypi-v0.0.1-design.md`.
+  `docs/superpowers/specs/2026-04-28-auntiepypi-v0.0.1-design.md`.

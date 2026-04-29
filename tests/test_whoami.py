@@ -1,4 +1,4 @@
-"""Tests for `agentpypi whoami`."""
+"""Tests for `auntiepypi whoami`."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import json
 
 import pytest
 
-from agentpypi.cli import main
+from auntiepypi.cli import main
 
 
 def test_whoami_text(
@@ -25,7 +25,7 @@ def test_whoami_text(
     rc = main(["whoami"])
     assert rc == 0
     out = capsys.readouterr().out
-    assert "agentpypi whoami" in out
+    assert "auntiepypi whoami" in out
     assert "indexes" in out
 
 
@@ -48,7 +48,7 @@ def test_whoami_json_default_index(
     rc = main(["whoami", "--json"])
     assert rc == 0
     payload = json.loads(capsys.readouterr().out)
-    assert payload["subject"] == "agentpypi whoami"
+    assert payload["subject"] == "auntiepypi whoami"
     assert payload["defaults"]["pypi"] == "https://pypi.org/simple"
     indexes_section = next(s for s in payload["sections"] if s["name"] == "indexes")
     assert indexes_section["summary"].endswith("https://pypi.org/simple")
@@ -103,7 +103,7 @@ def test_whoami_pip_conf_index_url_in_json_payload(
     tmp_path,
 ) -> None:
     """Verify pip conf values appear in the index_url_conf key of the JSON payload."""
-    from agentpypi.cli._commands.whoami import _read_pip_conf
+    from auntiepypi.cli._commands.whoami import _read_pip_conf
 
     pip_conf_dir = tmp_path / ".config" / "pip"
     pip_conf_dir.mkdir(parents=True)
@@ -124,7 +124,7 @@ def test_whoami_pip_conf_parse_error_continues(
     MissingSectionHeaderError (a subclass of configparser.Error) on read().
     _read_pip_conf silently skips the malformed file and returns {}.
     """
-    from agentpypi.cli._commands.whoami import _read_pip_conf
+    from auntiepypi.cli._commands.whoami import _read_pip_conf
 
     # Write a pip.conf without a section header — configparser raises
     # MissingSectionHeaderError, which is a subclass of configparser.Error.

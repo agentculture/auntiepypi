@@ -4,7 +4,7 @@
 If the package's ``__init__.py`` contains a literal ``__version__ = "..."``
 assignment, the script also rewrites that value. In repos that read
 ``__version__`` from package metadata (the AgentCulture sibling convention
-used by agentpypi, steward, afi-cli, etc.), the ``__init__.py`` step is a
+used by auntiepypi, steward, afi-cli, etc.), the ``__init__.py`` step is a
 no-op.
 
 Usage:

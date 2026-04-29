@@ -1,10 +1,10 @@
 # Maturity rubric
 
-`agentpypi packages overview <pkg>` evaluates seven independent signals
+`auntiepypi packages overview <pkg>` evaluates seven independent signals
 and reports a green / yellow / red light per signal. Each light is
 informational — see `docs/about.md` for why nothing here is gating.
 
-The thresholds below are the ones encoded in `agentpypi/_rubric/`
+The thresholds below are the ones encoded in `auntiepypi/_rubric/`
 today. The modules are the source of truth; this page is a reader's
 reference. If a number here disagrees with the code, the code wins —
 fix this page.
@@ -39,13 +39,13 @@ fix this page.
 
 ## Adding a dimension
 
-Each dimension lives in its own file under `agentpypi/_rubric/`,
+Each dimension lives in its own file under `auntiepypi/_rubric/`,
 exporting a module-level `DIMENSION = Dimension(...)`. The
 `overview` verb discovers them through
-`agentpypi/_rubric/__init__.py`. Adding a new signal means:
+`auntiepypi/_rubric/__init__.py`. Adding a new signal means:
 
 1. Drop a new `_rubric/<name>.py` exporting `DIMENSION`.
-2. Register it in `agentpypi/_rubric/__init__.py`.
+2. Register it in `auntiepypi/_rubric/__init__.py`.
 3. Update this page's table.
 4. Update `tests/` — every dimension has unit tests covering green,
    yellow, red, and unknown branches.

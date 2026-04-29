@@ -16,8 +16,8 @@ import time
 
 import pytest
 
-from agentpypi._rubric._fetch import FetchError
-from agentpypi._rubric._sources import fetch_pypi, fetch_pypistats
+from auntiepypi._rubric._fetch import FetchError
+from auntiepypi._rubric._sources import fetch_pypi, fetch_pypistats
 
 _TARGETS = ["requests", "pip", "setuptools"]
 
@@ -71,9 +71,9 @@ def test_packages_overview_against_real_api(monkeypatch, tmp_path, capsys):
     """End-to-end: run the CLI verb against live APIs."""
     import json
 
-    from agentpypi.cli import main
+    from auntiepypi.cli import main
 
-    (tmp_path / "pyproject.toml").write_text('[tool.agentpypi]\npackages = ["requests"]\n')
+    (tmp_path / "pyproject.toml").write_text('[tool.auntiepypi]\npackages = ["requests"]\n')
     monkeypatch.chdir(tmp_path)
 
     try:
