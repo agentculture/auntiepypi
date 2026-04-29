@@ -43,7 +43,8 @@ def test_learn_json_parseable(capsys: pytest.CaptureFixture[str]) -> None:
     paths = {tuple(c["path"]) for c in payload["commands"]}
     assert {("learn",), ("explain",), ("overview",), ("doctor",), ("whoami",)} <= paths
     planned = {tuple(p["path"]) for p in payload["planned"]}
-    assert ("online", "status") in planned
+    # online was promoted / removed; local stays in planned.
+    assert ("online", "status") not in planned
     assert ("local", "serve") in planned
 
 
@@ -155,3 +156,22 @@ def test_catalog_root_mentions_packages_overview():
 
     root = ENTRIES[("agentpypi",)]
     assert "agentpypi packages overview" in root
+
+
+def test_learn_json_drops_online_adds_packages():
+    import contextlib
+    from io import StringIO
+
+    from agentpypi.cli import main
+
+    buf = StringIO()
+    with contextlib.redirect_stdout(buf):
+        rc = main(["learn", "--json"])
+    assert rc == 0
+    payload = json.loads(buf.getvalue())
+    paths = [tuple(c["path"]) for c in payload["commands"]]
+    assert ("packages", "overview") in paths
+    planned = [tuple(p["path"]) for p in payload["planned"]]
+    assert ("online", "status") not in planned
+    assert ("online", "release") not in planned
+    assert ("local", "serve") in planned  # local stays

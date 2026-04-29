@@ -16,29 +16,33 @@ from agentpypi import __version__
 from agentpypi.cli._output import emit_result
 
 # Roadmap milestones — kept as constants so `learn`'s `planned` array
-# can never drift out of sync with `agentpypi explain online` /
-# `... explain local`. Update together when a milestone slides.
-_M_ONLINE = "v0.1.0"
+# can never drift out of sync with `agentpypi explain local`.
+# Update together when a milestone slides.
 _M_LOCAL = "v0.2.0"
+_M_SERVERS = "v0.2.0"
 
 _TEXT = """\
-agentpypi — both ends of the Python distribution pipe for the AgentCulture mesh.
+agentpypi — CLI and agent for managing PyPI packages across the AgentCulture mesh.
 
 Purpose
 -------
-Manage local and online PyPI surfaces for AgentCulture siblings. v0.0.1
-ships local-host introspection and the agent-affordance verbs; the
-`online` (sibling release orchestration) and `local` (mesh-resident
-private index) noun groups are planned for later milestones.
+agentpypi is both a CLI and an agent that maintains, uses, and serves the
+CLI for managing PyPI packages. It supports remote (pypi.org) today and
+local (mesh-hosted) indexes in future milestones. It overviews packages —
+informational, not gating.
 
 Commands
 --------
   agentpypi learn              Print this self-teaching prompt. Supports --json.
   agentpypi explain <path>...  Print markdown docs for any noun/verb path.
                                Supports --json.
-  agentpypi overview           Probe localhost for known PyPI server flavors
-                               (devpi:3141, pypiserver:8080); report up/down.
+  agentpypi overview [TARGET]  Composite: packages dashboard + local server
+                               probes. With TARGET, drills into one server
+                               flavor or one configured package.
                                Read-only. Supports --json.
+  agentpypi packages overview [PKG]  Read-only PyPI maturity dashboard or
+                               per-package deep-dive. Informational,
+                               not gating. Supports --json.
   agentpypi doctor [--fix]     Same probes plus diagnoses; with --fix, start
                                configured servers. Default is dry-run.
                                Supports --json.
@@ -48,12 +52,10 @@ Commands
 
 Planned (not yet registered)
 ----------------------------
-  agentpypi online status SIBLING       (v0.1.0)
-  agentpypi online release SIBLING      (v0.1.0)
   agentpypi local serve | upload | mirror (v0.2.0)
+  agentpypi servers overview              (v0.2.0)
 
-Use `agentpypi explain online` or `agentpypi explain local` to read the
-roadmap entry for either noun.
+Use `agentpypi explain local` to read the roadmap entry for the local noun.
 
 Machine-readable output
 -----------------------
@@ -79,15 +81,19 @@ def _as_json_payload() -> dict[str, object]:
         "tool": "agentpypi",
         "version": __version__,
         "purpose": (
-            "Manage local and online PyPI surfaces for AgentCulture siblings; "
-            "v0.0.1 ships local-host introspection and agent-affordance verbs."
+            "CLI and agent for managing PyPI packages; supports remote (pypi.org) today "
+            "and local (mesh-hosted) indexes in future milestones."
         ),
         "commands": [
             {"path": ["learn"], "summary": "Self-teaching prompt."},
             {"path": ["explain"], "summary": "Markdown docs by path."},
             {
                 "path": ["overview"],
-                "summary": "Probe localhost for PyPI server processes; report up/down.",
+                "summary": "Composite: packages dashboard + local server probes.",
+            },
+            {
+                "path": ["packages", "overview"],
+                "summary": "PyPI maturity dashboard or per-package deep-dive.",
             },
             {
                 "path": ["doctor"],
@@ -99,11 +105,10 @@ def _as_json_payload() -> dict[str, object]:
             },
         ],
         "planned": [
-            {"path": ["online", "status"], "milestone": _M_ONLINE},
-            {"path": ["online", "release"], "milestone": _M_ONLINE},
             {"path": ["local", "serve"], "milestone": _M_LOCAL},
             {"path": ["local", "upload"], "milestone": _M_LOCAL},
             {"path": ["local", "mirror"], "milestone": _M_LOCAL},
+            {"path": ["servers", "overview"], "milestone": _M_SERVERS},
         ],
         "exit_codes": {
             "0": "success",
