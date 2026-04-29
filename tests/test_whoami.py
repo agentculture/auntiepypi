@@ -64,3 +64,75 @@ def test_whoami_picks_up_pip_index_url_env(
     payload = json.loads(capsys.readouterr().out)
     indexes_section = next(s for s in payload["sections"] if s["name"] == "indexes")
     assert "https://example.test/simple" in indexes_section["summary"]
+
+
+def test_whoami_reads_pip_conf(
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    """Cover the pip.conf parsing branch (lines 44-61 of whoami.py)."""
+    # Write a pip.conf in the canonical ~/.config/pip/ location inside tmp_path.
+    pip_conf_dir = tmp_path / ".config" / "pip"
+    pip_conf_dir.mkdir(parents=True)
+    pip_conf = pip_conf_dir / "pip.conf"
+    pip_conf.write_text(
+        "[global]\n"
+        "index-url = https://example.com/simple\n"
+        "extra-index-url = https://other.example.com/simple\n"
+    )
+    monkeypatch.setenv("HOME", str(tmp_path))
+    for k in (
+        "PIP_INDEX_URL",
+        "PIP_EXTRA_INDEX_URL",
+        "UV_INDEX_URL",
+        "UV_EXTRA_INDEX_URL",
+    ):
+        monkeypatch.delenv(k, raising=False)
+    rc = main(["whoami", "--json"])
+    assert rc == 0
+    payload = json.loads(capsys.readouterr().out)
+    indexes_section = next(s for s in payload["sections"] if s["name"] == "indexes")
+    # The effective default should be the conf file's index-url.
+    assert "https://example.com/simple" in indexes_section["summary"]
+
+
+def test_whoami_pip_conf_index_url_in_json_payload(
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    """Verify pip conf values appear in the index_url_conf key of the JSON payload."""
+    from agentpypi.cli._commands.whoami import _read_pip_conf
+
+    pip_conf_dir = tmp_path / ".config" / "pip"
+    pip_conf_dir.mkdir(parents=True)
+    pip_conf = pip_conf_dir / "pip.conf"
+    pip_conf.write_text("[global]\n" "index-url = https://private.example.com/simple\n")
+    monkeypatch.setenv("HOME", str(tmp_path))
+    result = _read_pip_conf()
+    assert result.get("index-url") == "https://private.example.com/simple"
+
+
+def test_whoami_pip_conf_parse_error_continues(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    """Cover the except configparser.Error: continue branch (lines 47-48).
+
+    A pip.conf with a missing section header causes configparser to raise
+    MissingSectionHeaderError (a subclass of configparser.Error) on read().
+    _read_pip_conf silently skips the malformed file and returns {}.
+    """
+    from agentpypi.cli._commands.whoami import _read_pip_conf
+
+    # Write a pip.conf without a section header — configparser raises
+    # MissingSectionHeaderError, which is a subclass of configparser.Error.
+    pip_conf_dir = tmp_path / ".config" / "pip"
+    pip_conf_dir.mkdir(parents=True)
+    pip_conf = pip_conf_dir / "pip.conf"
+    pip_conf.write_text("index-url = https://example.com/simple\n")  # no [section]
+    monkeypatch.setenv("HOME", str(tmp_path))
+    result = _read_pip_conf()
+    # Malformed file is skipped; result should be empty (no global section parsed).
+    assert result == {}

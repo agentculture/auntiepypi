@@ -53,12 +53,13 @@ source = ["agentpypi"]
 omit = ["agentpypi/__pycache__/*"]
 
 [tool.coverage.report]
-fail_under = 60
+fail_under = 95
 show_missing = true
 exclude_lines = [
     "pragma: no cover",
     "if __name__ == .__main__.",
     "if TYPE_CHECKING:",
+    "raise NotImplementedError",
 ]
 
 [tool.isort]

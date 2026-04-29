@@ -62,7 +62,7 @@ def _dispatch(args: argparse.Namespace) -> int:
     except AfiError as err:
         emit_error(err, json_mode=json_mode)
         return err.code
-    except Exception as err:  # noqa: BLE001 - last-resort
+    except Exception as err:  # noqa: BLE001 - last-resort  # pragma: no cover
         wrapped = AfiError(
             code=EXIT_USER_ERROR,
             message=f"unexpected: {err.__class__.__name__}: {err}",

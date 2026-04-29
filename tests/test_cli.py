@@ -117,3 +117,25 @@ def test_unknown_top_level_verb_fails(capsys: pytest.CaptureFixture[str]) -> Non
     err = capsys.readouterr().err
     assert "error:" in err
     assert "hint:" in err
+
+
+def test_explain_json_mode(capsys: pytest.CaptureFixture[str]) -> None:
+    """Cover explain's --json branch (line 21 of explain.py)."""
+    rc = main(["explain", "--json", "agentpypi"])
+    assert rc == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert "markdown" in payload
+    assert "path" in payload
+    assert payload["path"] == ["agentpypi"]
+
+
+def test_explain_known_paths() -> None:
+    """Cover the known_paths() function in explain/__init__.py (line 24)."""
+    from agentpypi.explain import known_paths
+
+    paths = known_paths()
+    assert isinstance(paths, list)
+    assert len(paths) > 0
+    # Root and all registered verbs should be present.
+    assert any(p == () for p in paths)
+    assert any("learn" in p for p in paths)
