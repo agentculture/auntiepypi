@@ -154,23 +154,12 @@ ignores:
 
 ## 3. `CHANGELOG.md`
 
-Keep-a-Changelog header. The `version-bump` skill prepends entries on
-every PR.
-
-```markdown
-# Changelog
-
-All notable changes to this project will be documented in this file.
-
-Format follows [Keep a Changelog](https://keepachangelog.com/). This project
-adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-
-## [0.0.1] - YYYY-MM-DD
-
-### Added
-
-- Initial scaffold.
-```
+Keep-a-Changelog header at the top, one `## [x.y.z] - YYYY-MM-DD`
+section per release. Format, bump types, and the JSON-stdin contract
+for prepending entries are all owned by the vendored `version-bump`
+skill — see `.claude/skills/version-bump/SKILL.md`. CI's `version-check`
+job blocks merge if `pyproject.toml`'s version equals `main`'s, so
+every PR runs the skill.
 
 ## 4. `.github/workflows/tests.yml`
 
@@ -361,13 +350,19 @@ jobs:
           uv publish --trusted-publishing always --check-url https://pypi.org/simple/
 ```
 
-## 6. Pre-commit (optional but expected)
+## 6. Pre-commit and PR workflow
 
-`../CLAUDE.md` mentions a pre-commit hook set every sibling ships with.
-Steward doesn't ship one yet, so look at `../shushu/.pre-commit-config.yaml`
-or `../ghafi/.pre-commit-config.yaml` for the canonical layout. Wire
-`black`, `isort`, `flake8`, `bandit`, `markdownlint-cli2` (in
-check-only mode), and the portability lint.
+`../CLAUDE.md` mentions a pre-commit hook set every sibling ships with;
+look at `../shushu/.pre-commit-config.yaml` or
+`../ghafi/.pre-commit-config.yaml` for the canonical layout. The
+linters that need to run pre-commit are the same ones CI runs in
+section 4: `black`, `isort`, `flake8`, `bandit`, `markdownlint-cli2`
+(check-only mode), and the portability lint.
+
+The branch-edit-commit-push-PR-review loop, including the portability
+lint, the `gh`/`jq` plumbing, and Qodo/Copilot reply automation, is
+owned by the vendored `pr-review` skill — see
+`.claude/skills/pr-review/SKILL.md`. Don't re-derive it here.
 
 ## Verification
 

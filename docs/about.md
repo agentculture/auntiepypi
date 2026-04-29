@@ -28,11 +28,13 @@ Two things, both read-only:
    signals broken out: recency of releases, cadence between them,
    download volume, Trove lifecycle classifier, distribution
    (wheel/sdist), metadata completeness, and PEP 440 versioning
-   maturity.
+   maturity. See `maturity-rubric.md` for the green/yellow/red
+   thresholds each signal applies.
 
-The same machinery feeds the top-level `agentpypi overview`, which adds
-a second category — local PyPI server probes — for a one-shot picture
-of "what's going on with my packages and my local servers right now".
+The same machinery feeds the top-level `agentpypi overview`, which
+composes the packages dashboard with a `servers` section that probes
+local PyPI flavors (devpi, pypiserver) — one read for "what's going on
+with my packages and my local servers right now".
 
 ## What "informational, not gating" means
 
@@ -48,11 +50,13 @@ useful.
 
 ## Where it's headed
 
+The composite `overview` already *probes* local servers; v0.2.0 adds
+the write-side machinery for actually running them.
+
 - v0.2.0 — local in-mesh PyPI index. `agentpypi local serve` /
-  `upload` / `mirror`. The dashboard's `index` column starts showing
-  local mesh URLs for packages you host in-house.
-- v0.2.0 — `agentpypi servers …` for lifecycle management of those
-  local servers (start/stop/list/diagnose).
+  `upload` / `mirror`, plus an `agentpypi servers …` lifecycle noun
+  (start/stop/list/diagnose). The dashboard's `index` column starts
+  showing local mesh URLs for packages you host in-house.
 - Later — release orchestration (trigger sibling `publish.yml`
   workflows); periodic last-update sweeps; whatever the mesh needs
   next.
