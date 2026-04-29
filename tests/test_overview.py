@@ -14,7 +14,9 @@ def test_overview_text_no_args(capsys: pytest.CaptureFixture[str]) -> None:
     out = capsys.readouterr().out
     assert out.strip()
     assert "agentpypi overview" in out
-    assert "local-pypi-servers" in out
+    # v0.1.0: servers appear by their probe name (devpi / pypiserver), not
+    # as the legacy "local-pypi-servers" aggregate section header.
+    assert any(name in out for name in ("devpi", "pypiserver"))
 
 
 def test_overview_json_shape(capsys: pytest.CaptureFixture[str]) -> None:
@@ -24,13 +26,17 @@ def test_overview_json_shape(capsys: pytest.CaptureFixture[str]) -> None:
     assert isinstance(payload, dict)
     assert payload["subject"] == "agentpypi overview"
     assert isinstance(payload["sections"], list)
+    # v0.1.0 shape: each section carries category / title / light / fields.
+    # No [tool.agentpypi].packages in agentpypi's own pyproject.toml yet,
+    # so only servers sections are emitted here.
     assert len(payload["sections"]) >= 1
     section = payload["sections"][0]
-    assert section["name"] == "local-pypi-servers"
-    assert "items" in section
-    for item in section["items"]:
-        assert {"name", "port", "url", "status"} <= set(item.keys())
-        assert item["status"] in {"up", "down", "absent"}
+    assert section["category"] == "servers"
+    assert "title" in section
+    assert "light" in section
+    assert "fields" in section
+    field_names = {f["name"] for f in section["fields"]}
+    assert {"port", "url", "status"} <= field_names
 
 
 def test_overview_graceful_on_unknown_target(
