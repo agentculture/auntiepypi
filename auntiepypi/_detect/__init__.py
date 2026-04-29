@@ -22,11 +22,13 @@ from auntiepypi._detect._config import (
     load_servers,
 )
 from auntiepypi._detect._detection import Detection
+from auntiepypi._detect._runtime import detect_all
 
 __all__ = [
     "Detection",
     "ServerConfigError",
     "ServerSpec",
     "ServersConfig",
+    "detect_all",
     "load_servers",
 ]
