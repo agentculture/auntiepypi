@@ -77,4 +77,7 @@ skips = ["B101", "B404", "B603"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-ra"
+addopts = "-ra -m 'not live'"
+markers = [
+    "live: opt-in tests that hit pypi.org / pypistats.org over the network",
+]
