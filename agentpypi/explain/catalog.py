@@ -12,26 +12,27 @@ from __future__ import annotations
 _ROOT = """\
 # agentpypi
 
-agentpypi manages both ends of the Python distribution pipe for the
-AgentCulture mesh: an in-mesh local PyPI index for intra-org wheels, and
-release orchestration for AgentCulture siblings against PyPI / TestPyPI.
-
-v0.0.1 ships local-host introspection plus the agent-affordance verbs.
-The `online` and `local` noun groups are planned for later milestones.
+agentpypi is both a CLI and an agent that maintains, uses, and serves
+the CLI for managing PyPI packages. It supports remote (pypi.org) today
+and local (mesh-hosted) indexes in future milestones. It overviews
+packages — informational, not gating.
 
 ## Verbs
 
 - `agentpypi learn` — structured self-teaching prompt.
 - `agentpypi explain <path>` — markdown docs for any noun/verb.
-- `agentpypi overview` — probe localhost for known PyPI server flavors.
+- `agentpypi overview [TARGET]` — composite: packages dashboard + local
+  server probes. With TARGET, drills into one server flavor or one
+  configured package.
+- `agentpypi packages overview [PKG]` — read-only PyPI maturity dashboard
+  (no arg) or per-package deep-dive (with arg).
 - `agentpypi doctor [--fix]` — probe + diagnose; `--fix` starts servers.
 - `agentpypi whoami` — auth/env probe; reports configured indexes.
 
 ## Planned
 
-- `agentpypi online status SIBLING` — v0.1.0
-- `agentpypi online release SIBLING [--apply]` — v0.1.0
 - `agentpypi local serve | upload | mirror` — v0.2.0
+- `agentpypi servers …` — v0.2.0 (formal home for server lifecycle)
 
 ## Exit-code policy
 
@@ -45,9 +46,10 @@ The `online` and `local` noun groups are planned for later milestones.
 - `agentpypi explain learn`
 - `agentpypi explain explain`
 - `agentpypi explain overview`
+- `agentpypi explain packages`
+- `agentpypi explain packages overview`
 - `agentpypi explain doctor`
 - `agentpypi explain whoami`
-- `agentpypi explain online`
 - `agentpypi explain local`
 """
 
@@ -88,9 +90,12 @@ Unknown paths exit `1` with `error: no explain entry for: <path>` and a
 _OVERVIEW = """\
 # agentpypi overview
 
-Probes `127.0.0.1` for known PyPI server flavors and reports up/down/absent.
+Composite report. With no arg: emits a packages dashboard (one section
+per configured package) plus the local PyPI server probes (one section
+per known flavor). With an arg, drills into one server flavor or one
+configured package, in that priority.
 
-Recognised flavors:
+Recognised server flavors:
 
 - `devpi` on port `3141` (`/+api`)
 - `pypiserver` on port `8080` (`/`)
@@ -102,19 +107,22 @@ servers.
 
     agentpypi overview
     agentpypi overview --json
+    agentpypi overview <server-flavor>      # e.g. `devpi`
+    agentpypi overview <configured-pkg>     # e.g. `requests`
 
-JSON payload:
+## JSON envelope
 
     {
-      "servers": [
-        {"name": "devpi", "port": 3141, "url": "...", "status": "up|down|absent",
-         "version": "..."}
+      "subject": "agentpypi",
+      "sections": [
+        {"category": "packages", "title": "<pkg>", "light": "green|...", "fields": [...]},
+        {"category": "servers",  "title": "<flavor>", "light": "...", "fields": [...]}
       ]
     }
 
 ## Exit codes
 
-- `0` always (probe failures are reported as `down`/`absent`, not exit codes).
+- `0` always.
 """
 
 _DOCTOR = """\
@@ -162,26 +170,56 @@ probe machinery `overview` uses to flag local indexes that are
 Read-only.
 """
 
-_ONLINE = """\
-# agentpypi online (planned, v0.1.0)
+_PACKAGES = """\
+# agentpypi packages
 
-Release orchestration for AgentCulture siblings (`afi-cli`, `cfafi`,
-`ghafi`, `shushu`, `steward`, `zehut`, …). Reads PyPI + TestPyPI state,
-diffs against `CHANGELOG.md` / `main`, and triggers each sibling's
-`publish.yml` workflow over OIDC Trusted Publishing.
+Read-only verbs against PyPI for the configured set of packages.
 
-This noun is **not yet registered** in v0.0.1. The catalog entry exists so
-agents querying the roadmap get an honest answer.
+The configured set lives in `pyproject.toml`:
 
-## Planned verbs
+    [tool.agentpypi]
+    packages = ["pkg-a", "pkg-b"]
 
-- `agentpypi online status SIBLING` — read-only diff: PyPI vs CHANGELOG vs
-  main vs latest tag.
-- `agentpypi online release SIBLING [--apply]` — dry-run by default;
-  `--apply` triggers the sibling's `publish.yml`.
+## Verbs
 
-Track at https://github.com/agentculture/agentpypi/milestones — milestone
-v0.1.0.
+- `agentpypi packages overview` — dashboard over all configured packages.
+- `agentpypi packages overview <pkg>` — deep-dive over the rubric for one.
+
+Read-only by design. Reports — never gates. Exit code is `0` regardless
+of how many packages roll up `red`.
+"""
+
+_PACKAGES_OVERVIEW = """\
+# agentpypi packages overview
+
+Roll-up dashboard over the configured package list, or per-package
+deep-dive when called with an argument.
+
+## Usage
+
+    agentpypi packages overview            # dashboard
+    agentpypi packages overview <pkg>      # deep-dive
+    agentpypi packages overview --json
+    agentpypi packages overview <pkg> --json
+
+## Rubric (deep-dive)
+
+Seven dimensions, each scored pass / warn / fail / unknown, rolled up
+to a green / yellow / red / unknown traffic light:
+
+- recency — days since last non-yanked release
+- cadence — median gap between last 5 releases
+- downloads — pypistats `last_week`
+- lifecycle — Trove `Development Status` classifier
+- distribution — wheel + sdist availability
+- metadata — license / requires_python / Homepage / Source / README
+- versioning — PEP 440 maturity
+
+## Exit codes
+
+- `0` always (read-only; reds do not change the exit).
+- `1` on missing config (no `[tool.agentpypi].packages`) or invalid name.
+- `2` only if every fetch failed.
 """
 
 _LOCAL = """\
@@ -190,9 +228,10 @@ _LOCAL = """\
 Run / mirror / publish to an in-mesh PyPI index so AgentCulture agents can
 exchange wheels without leaving the org's trust boundary.
 
-This noun is **not yet registered** in v0.0.1. v0.0.1 ships `overview`
-and `doctor` instead, which probe localhost for PyPI server flavors but
-don't yet manage one.
+This noun is **not yet registered**. v0.1.0 ships `overview`, `doctor`,
+and `packages overview` — the first two probe localhost for PyPI server
+flavors; the third reports on remote PyPI packages. None of them manage
+a local index yet.
 
 ## Planned verbs
 
@@ -214,6 +253,7 @@ ENTRIES: dict[tuple[str, ...], str] = {
     ("overview",): _OVERVIEW,
     ("doctor",): _DOCTOR,
     ("whoami",): _WHOAMI,
-    ("online",): _ONLINE,
+    ("packages",): _PACKAGES,
+    ("packages", "overview"): _PACKAGES_OVERVIEW,
     ("local",): _LOCAL,
 }

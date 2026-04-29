@@ -223,3 +223,4 @@ __marimo__/
 
 # AFI scaffold — written by `afi cli cite .`, never committed
 .afi/
+.claude/scheduled_tasks.lock

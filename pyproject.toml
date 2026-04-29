@@ -1,6 +1,6 @@
 [project]
 name = "agentpypi"
-version = "0.0.2"
+version = "0.1.4"
 description = "agentpypi — both ends of the Python distribution pipe for the AgentCulture mesh."
 readme = "README.md"
 license = "MIT"
@@ -14,8 +14,8 @@ classifiers = [
     "Intended Audience :: Developers",
 ]
 dependencies = [
-    # Zero runtime deps at v0.0.1. Stdlib only (argparse, json, tomllib,
-    # urllib.request, socket, subprocess). Add only when a verb needs
+    # Zero runtime deps. Stdlib only (argparse, json, tomllib,
+    # urllib.request, socket, subprocess, concurrent.futures). Add only when a verb needs
     # something stdlib can't do.
 ]
 
@@ -53,12 +53,13 @@ source = ["agentpypi"]
 omit = ["agentpypi/__pycache__/*"]
 
 [tool.coverage.report]
-fail_under = 60
+fail_under = 95
 show_missing = true
 exclude_lines = [
     "pragma: no cover",
     "if __name__ == .__main__.",
     "if TYPE_CHECKING:",
+    "raise NotImplementedError",
 ]
 
 [tool.isort]
@@ -76,4 +77,20 @@ skips = ["B101", "B404", "B603"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-ra"
+addopts = "-ra -m 'not live'"
+markers = [
+    "live: opt-in tests that hit pypi.org / pypistats.org over the network",
+]
+
+[tool.agentpypi]
+# Packages this repo cares about for `agentpypi packages overview`.
+# These are AgentCulture siblings published to pypi.org. Add or remove as
+# the mesh evolves.
+packages = [
+    "agentpypi",
+    "afi-cli",
+    "shushu",
+    "ghafi",
+    "steward",
+    "cfafi",
+]

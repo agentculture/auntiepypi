@@ -43,7 +43,8 @@ def test_learn_json_parseable(capsys: pytest.CaptureFixture[str]) -> None:
     paths = {tuple(c["path"]) for c in payload["commands"]}
     assert {("learn",), ("explain",), ("overview",), ("doctor",), ("whoami",)} <= paths
     planned = {tuple(p["path"]) for p in payload["planned"]}
-    assert ("online", "status") in planned
+    # online was promoted / removed; local stays in planned.
+    assert ("online", "status") not in planned
     assert ("local", "serve") in planned
 
 
@@ -66,7 +67,8 @@ def test_explain_each_registered_verb(capsys: pytest.CaptureFixture[str]) -> Non
 
 
 def test_explain_planned_nouns(capsys: pytest.CaptureFixture[str]) -> None:
-    for noun in ("online", "local"):
+    # `local` stays in the catalog as a planned noun; `online` was removed.
+    for noun in ("local",):
         capsys.readouterr()
         assert main(["explain", noun]) == 0
         out = capsys.readouterr().out
@@ -117,3 +119,59 @@ def test_unknown_top_level_verb_fails(capsys: pytest.CaptureFixture[str]) -> Non
     err = capsys.readouterr().err
     assert "error:" in err
     assert "hint:" in err
+
+
+def test_explain_json_mode(capsys: pytest.CaptureFixture[str]) -> None:
+    """Cover explain's --json branch (line 21 of explain.py)."""
+    rc = main(["explain", "--json", "agentpypi"])
+    assert rc == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert "markdown" in payload
+    assert "path" in payload
+    assert payload["path"] == ["agentpypi"]
+
+
+def test_explain_known_paths() -> None:
+    """Cover the known_paths() function in explain/__init__.py (line 24)."""
+    from agentpypi.explain import known_paths
+
+    paths = known_paths()
+    assert isinstance(paths, list)
+    assert len(paths) > 0
+    # Root and all registered verbs should be present.
+    assert any(p == () for p in paths)
+    assert any("learn" in p for p in paths)
+
+
+def test_catalog_has_packages_entry():
+    from agentpypi.explain.catalog import ENTRIES
+
+    assert ("packages",) in ENTRIES
+    assert ("packages", "overview") in ENTRIES
+    assert ("online",) not in ENTRIES
+
+
+def test_catalog_root_mentions_packages_overview():
+    from agentpypi.explain.catalog import ENTRIES
+
+    root = ENTRIES[("agentpypi",)]
+    assert "agentpypi packages overview" in root
+
+
+def test_learn_json_drops_online_adds_packages():
+    import contextlib
+    from io import StringIO
+
+    from agentpypi.cli import main
+
+    buf = StringIO()
+    with contextlib.redirect_stdout(buf):
+        rc = main(["learn", "--json"])
+    assert rc == 0
+    payload = json.loads(buf.getvalue())
+    paths = [tuple(c["path"]) for c in payload["commands"]]
+    assert ("packages", "overview") in paths
+    planned = [tuple(p["path"]) for p in payload["planned"]]
+    assert ("online", "status") not in planned
+    assert ("online", "release") not in planned
+    assert ("local", "serve") in planned  # local stays

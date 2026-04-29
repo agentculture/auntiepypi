@@ -21,6 +21,7 @@ from agentpypi.cli._commands import explain as _explain_cmd
 from agentpypi.cli._commands import learn as _learn_cmd
 from agentpypi.cli._commands import overview as _overview_cmd
 from agentpypi.cli._commands import whoami as _whoami_cmd
+from agentpypi.cli._commands._packages import overview as _packages_overview_cmd
 from agentpypi.cli._errors import EXIT_USER_ERROR, AfiError
 from agentpypi.cli._output import emit_error
 
@@ -51,6 +52,7 @@ def _build_parser() -> argparse.ArgumentParser:
     _overview_cmd.register(sub)
     _doctor_cmd.register(sub)
     _whoami_cmd.register(sub)
+    _packages_overview_cmd.register(sub)
 
     return parser
 
@@ -62,7 +64,7 @@ def _dispatch(args: argparse.Namespace) -> int:
     except AfiError as err:
         emit_error(err, json_mode=json_mode)
         return err.code
-    except Exception as err:  # noqa: BLE001 - last-resort
+    except Exception as err:  # noqa: BLE001 - last-resort  # pragma: no cover
         wrapped = AfiError(
             code=EXIT_USER_ERROR,
             message=f"unexpected: {err.__class__.__name__}: {err}",

@@ -5,6 +5,55 @@ All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.4] - 2026-04-29
+
+### Added
+
+### Changed
+
+### Fixed
+
+## [0.1.3] - 2026-04-29
+
+### Added
+
+### Changed
+
+### Fixed
+
+## [0.1.2] - 2026-04-29
+
+### Added
+
+### Changed
+
+### Fixed
+
+## [0.1.1] - 2026-04-29
+
+### Added
+
+### Changed
+
+### Fixed
+
+## [0.1.0] - 2026-04-29
+
+### Added
+
+- `agentpypi packages overview [PKG]` — read-only PyPI maturity dashboard / deep-dive (informational, not gating).
+- Top-level `agentpypi overview` promoted to composite of `packages` + `servers` sections.
+- `_rubric/` plugin point (parallels `_probes/`) with seven dimensions: recency, cadence, downloads, lifecycle, distribution, metadata, versioning.
+- `[tool.agentpypi].packages` config block in `pyproject.toml`.
+- `@pytest.mark.live` opt-in network suite + CI wiring (soft on PR, blocking on main).
+- Pre/post-deploy smoke jobs in `publish.yml`.
+- `docs/about.md` — non-technical explainer.
+
+### Changed
+
+- Section JSON shape standardises on `{category, title, light, fields}`. Existing v0.0.1 server-flavor sections gain `category: "servers"`.
+- Coverage gate: 60% → 95%.
+
 ## [0.0.2] - 2026-04-28
 
 ### Changed

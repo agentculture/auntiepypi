@@ -53,7 +53,7 @@ def _read_pip_conf() -> dict[str, str]:
             try:
                 if parser.has_option("global", key):
                     out[key] = parser.get("global", key)
-            except configparser.Error:
+            except configparser.Error:  # pragma: no cover - unreachable with interpolation=None
                 # Defensive: any residual parser error here (interpolation,
                 # malformed value, encoding) is treated as "value not present"
                 # rather than crashing whoami. The verb is read-only and
