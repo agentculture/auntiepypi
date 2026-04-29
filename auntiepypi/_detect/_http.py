@@ -53,7 +53,7 @@ def probe_endpoint(
     """
     # `pypi-server` and `devpi-server` default to plain HTTP on localhost;
     # HTTPS is not the protocol these servers speak in their default config.
-    url = f"http://{host}:{port}{path}"  # noqa: S310  # nosec B310 NOSONAR S5332
+    url = f"http://{host}:{port}{path}"  # NOSONAR S5332 (localhost-only) noqa: S310 nosec B310
     if not _tcp_open(host, port, timeout):
         return ProbeOutcome(url=url, tcp_open=False, http_status=None, body=None, error=None)
     req = urllib.request.Request(url, headers={"User-Agent": _USER_AGENT, "Accept": "*/*"})
