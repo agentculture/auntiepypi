@@ -38,12 +38,12 @@ jobs:
         run: uv build
       - name: Install built wheel into clean venv
         run: |
-          python -m venv /tmp/smoke
-          /tmp/smoke/bin/pip install --quiet dist/*.whl
+          uv venv /tmp/smoke --python 3.12
+          /tmp/smoke/bin/python -m pip install --quiet dist/*.whl
       - name: Smoke — version + packages overview against pypi.org
         run: |
           /tmp/smoke/bin/agentpypi --version
-          /tmp/smoke/bin/agentpypi packages overview requests --json | python -m json.tool
+          /tmp/smoke/bin/agentpypi packages overview requests --json | /tmp/smoke/bin/python -m json.tool
 
   test-publish:
     # Skip on fork PRs — no OIDC context, the publish step would fail.
@@ -120,7 +120,7 @@ jobs:
         run: |
           VERSION=$(uv run python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
           rm -rf /tmp/postsmoke
-          python -m venv /tmp/postsmoke
-          /tmp/postsmoke/bin/pip install --quiet "agentpypi==$VERSION"
+          uv venv /tmp/postsmoke --python 3.12
+          /tmp/postsmoke/bin/python -m pip install --quiet "agentpypi==$VERSION"
           /tmp/postsmoke/bin/agentpypi --version
-          /tmp/postsmoke/bin/agentpypi packages overview requests --json | python -m json.tool
+          /tmp/postsmoke/bin/agentpypi packages overview requests --json | /tmp/postsmoke/bin/python -m json.tool

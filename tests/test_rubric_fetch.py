@@ -42,7 +42,8 @@ def _serve(handler: type[BaseHTTPRequestHandler]) -> Iterator[str]:
     thread = threading.Thread(target=srv.serve_forever, daemon=True)
     thread.start()
     try:
-        yield f"http://{srv.server_address[0]}:{srv.server_address[1]}"
+        # NOSONAR S5332 — loopback test server; localhost-only, never reaches the network.
+        yield f"http://{srv.server_address[0]}:{srv.server_address[1]}"  # noqa
     finally:
         srv.shutdown()
         thread.join(timeout=2)

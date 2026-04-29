@@ -9,8 +9,16 @@ from agentpypi._rubric._dimension import Dimension, DimensionResult, Score
 
 
 def _nonyanked_uploads(pypi: dict) -> list[datetime]:
-    out: list[datetime] = []
+    """Return one timestamp per version (max upload_time across non-yanked files).
+
+    A PyPI version commonly carries multiple files (sdist + several wheels).
+    Treating each file as a release would introduce duplicate / near-duplicate
+    timestamps and skew the median toward zero gaps. We pick the latest upload
+    per version and dedupe to one timestamp per version.
+    """
+    per_version: list[datetime] = []
     for files in (pypi.get("releases") or {}).values():
+        version_max: datetime | None = None
         for f in files or []:
             if f.get("yanked"):
                 continue
@@ -20,8 +28,11 @@ def _nonyanked_uploads(pypi: dict) -> list[datetime]:
             t = datetime.fromisoformat(ts.replace("Z", "+00:00"))
             if t.tzinfo is None:
                 t = t.replace(tzinfo=timezone.utc)
-            out.append(t)
-    return sorted(out)
+            if version_max is None or t > version_max:
+                version_max = t
+        if version_max is not None:
+            per_version.append(version_max)
+    return sorted(per_version)
 
 
 def _evaluate(pypi: dict | None, _stats: dict | None) -> DimensionResult:

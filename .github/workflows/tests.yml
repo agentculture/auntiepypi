@@ -106,4 +106,6 @@ jobs:
       - run: uv python install 3.12
       - run: uv sync
       - name: Live network tests
-        run: uv run pytest -m live -v
+        # Override addopts to drop the default `-m 'not live'` filter; pytest
+        # combines multiple -m filters with AND, which would deselect everything.
+        run: uv run pytest -o addopts="-ra" -m live -v

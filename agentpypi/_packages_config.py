@@ -17,21 +17,35 @@ class ConfigError(Exception):
     """Raised when the configured package list is missing or malformed."""
 
 
-def find_pyproject(start: Path | None = None) -> Path | None:
-    """Walk up from ``start`` looking for the nearest ``pyproject.toml``.
+def _has_agentpypi_table(path: Path) -> bool:
+    try:
+        with path.open("rb") as f:
+            data = tomllib.load(f)
+    except (OSError, tomllib.TOMLDecodeError):
+        return False
+    return isinstance(data.get("tool", {}).get("agentpypi"), dict)
 
-    Stops at ``$HOME``. Returns the path to the first ``pyproject.toml``
-    found, or ``None`` if nothing is found within the ceiling.
+
+def find_pyproject(start: Path | None = None) -> Path | None:
+    """Walk up from ``start`` looking for a ``pyproject.toml`` with ``[tool.agentpypi]``.
+
+    Stops at ``$HOME``. Returns the first pyproject.toml whose ``[tool.agentpypi]``
+    table is present; otherwise the first pyproject.toml encountered (so the loader
+    can produce a precise error about the missing key); otherwise ``None``.
     """
     cwd = Path(start) if start is not None else Path.cwd()
     home = Path(os.environ.get("HOME", "/"))
     cur = cwd.resolve()
+    first_match: Path | None = None
     while True:
         candidate = cur / "pyproject.toml"
         if candidate.exists():
-            return candidate
+            if _has_agentpypi_table(candidate):
+                return candidate
+            if first_match is None:
+                first_match = candidate
         if cur == cur.parent or cur == home:
-            return None
+            return first_match
         cur = cur.parent
 
 
@@ -43,7 +57,10 @@ def load_package_names(start: Path | None = None) -> list[str]:
     """
     found = find_pyproject(start)
     if found is None:
-        raise ConfigError("no pyproject.toml found within the $HOME ceiling")
+        raise ConfigError(
+            "no [tool.agentpypi].packages found: no pyproject.toml between "
+            "the start path and $HOME"
+        )
     with found.open("rb") as f:
         data = tomllib.load(f)
     table = data.get("tool", {}).get("agentpypi", {})

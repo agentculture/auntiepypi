@@ -80,3 +80,27 @@ def test_unknown_when_no_releases():
 def test_dimension_metadata():
     assert cadence.DIMENSION.name == "cadence"
     assert cadence.DIMENSION.description
+
+
+def test_multi_file_releases_count_as_one_timestamp():
+    """Each version's sdist+wheels must collapse to one timestamp (no skew toward 0)."""
+    # Two versions, each with 3 files at timestamps within ~1s of each other.
+    # If we treat files as releases, gaps would be ~0d → spurious PASS.
+    # With dedup, this is 1 gap of 90 days → FAIL.
+    pypi = {
+        "releases": {
+            "1.0.0": [
+                {"upload_time_iso_8601": _ts(90), "yanked": False},
+                {"upload_time_iso_8601": _ts(90), "yanked": False},
+                {"upload_time_iso_8601": _ts(90), "yanked": False},
+            ],
+            "2.0.0": [
+                {"upload_time_iso_8601": _ts(0), "yanked": False},
+                {"upload_time_iso_8601": _ts(0), "yanked": False},
+                {"upload_time_iso_8601": _ts(0), "yanked": False},
+            ],
+        }
+    }
+    r = cadence.DIMENSION.evaluate(pypi, None)
+    assert r.score is Score.FAIL
+    assert "2 releases" in r.value

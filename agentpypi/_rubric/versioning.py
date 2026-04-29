@@ -6,10 +6,12 @@ import re
 
 from agentpypi._rubric._dimension import Dimension, DimensionResult, Score
 
-# Loose PEP 440 regex sufficient for our needs (major.minor.patch + pre/dev).
+# Loose PEP 440 regex sufficient for our needs:
+# epoch! major.minor[.patch] [pre] [.devN] [.postN] [+local]
 _PEP440 = re.compile(
     r"^(?P<epoch>\d+!)?(?P<major>\d+)\.(?P<minor>\d+)(?:\.\d+)?"
-    r"(?P<pre>(a|b|rc)\d+)?(?:\.dev\d+)?(?:\.post\d+)?$"
+    r"(?P<pre>(a|b|rc)\d+)?(?:\.dev\d+)?(?:\.post\d+)?"
+    r"(?:\+(?:[a-zA-Z0-9]+(?:[-_.][a-zA-Z0-9]+)*))?$"
 )
 
 

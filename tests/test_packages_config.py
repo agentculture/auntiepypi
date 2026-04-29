@@ -62,3 +62,16 @@ def test_rejects_non_string_entries(tmp_path):
     _write_toml(tmp_path, '[tool.agentpypi]\npackages = ["good", 42]\n')
     with pytest.raises(ConfigError, match="non-string"):
         load_package_names(tmp_path)
+
+
+def test_walks_past_pyproject_without_agentpypi_table(tmp_path, monkeypatch):
+    """Intermediate pyproject without [tool.agentpypi] should not stop the walk."""
+    monkeypatch.setenv("HOME", str(tmp_path))
+    # Outer pyproject has the table; intermediate does not.
+    _write_toml(tmp_path, '[tool.agentpypi]\npackages = ["outer-pkg"]\n')
+    inner = tmp_path / "sub"
+    inner.mkdir()
+    (inner / "pyproject.toml").write_text('[project]\nname = "intermediate"\n')
+    deepest = inner / "src"
+    deepest.mkdir()
+    assert load_package_names(deepest) == ["outer-pkg"]

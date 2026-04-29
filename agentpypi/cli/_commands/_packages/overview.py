@@ -116,15 +116,22 @@ def _deep_dive(pkg: str, pypi: dict | None, stats: dict | None) -> dict:
 
 def _dashboard(names: list[str]) -> tuple[dict, list[str], int]:
     """Return (payload, warnings, fetch_failures)."""
+    # Validate up-front so a malformed name surfaces as exit 1 (user error)
+    # rather than confusing fetch failures.
+    for n in names:
+        _validate_name(n)
     sections: list[dict] = []
     warnings: list[str] = []
     failures = 0
     with ThreadPoolExecutor(max_workers=8) as ex:
         futures = {ex.submit(_fetch_pair, n): n for n in names}
         results: dict[str, tuple[dict | None, dict | None, list[str]]] = {}
-        for fut in futures:
-            n = futures[fut]
-            results[n] = fut.result()
+        for fut, n in futures.items():
+            try:
+                results[n] = fut.result()
+            except Exception as err:  # noqa: BLE001 - per-package isolation
+                warnings.append(f"{n}: unexpected fetch error: {err.__class__.__name__}: {err}")
+                results[n] = (None, None, [])
     for n in names:
         pypi, stats, warns = results[n]
         warnings.extend(warns)

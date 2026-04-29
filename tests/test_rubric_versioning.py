@@ -59,3 +59,14 @@ def test_unknown_when_pypi_none():
 def test_dimension_metadata():
     assert versioning.DIMENSION.name == "versioning"
     assert versioning.DIMENSION.description
+
+
+def test_pass_for_pep440_with_local_segment():
+    """`1.2.3+cpu` is valid PEP 440 — should not be UNKNOWN."""
+    r = versioning.DIMENSION.evaluate(_pypi("1.2.3+cpu"), None)
+    assert r.score is Score.PASS
+
+
+def test_warn_for_0_x_with_local_segment():
+    r = versioning.DIMENSION.evaluate(_pypi("0.5.0+abc.1", n_releases=10), None)
+    assert r.score is Score.WARN
