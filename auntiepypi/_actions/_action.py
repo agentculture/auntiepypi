@@ -4,6 +4,7 @@ Strategies live in `auntiepypi/_actions/<managed_by>.py`. Each exposes
 ``apply(detection, declaration) -> ActionResult``. `dispatch()` in
 ``_actions/__init__.py`` routes on `managed_by`.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
