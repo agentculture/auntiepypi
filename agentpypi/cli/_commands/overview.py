@@ -67,7 +67,7 @@ def _try_package_target(target: str) -> dict | None:
         return None
     if target not in names:
         return None
-    pypi, stats, warnings = _fetch_pair(target)
+    pypi, stats, warnings, _env_failure = _fetch_pair(target)
     for w in warnings:
         emit_diagnostic(f"warning: {w}")
     return _deep_dive(target, pypi, stats)
@@ -80,7 +80,7 @@ def _composite_no_arg(json_mode: bool) -> int:
         names = load_package_names()
     except ConfigError:
         names = []
-        emit_diagnostic("warning: no [tool.agentpypi].packages configured; " "showing servers only")
+        emit_diagnostic("warning: no [tool.agentpypi].packages configured; showing servers only")
     if names:
         payload, warnings, _failures = _dashboard(names)
         for w in warnings:

@@ -105,12 +105,12 @@ def test_overview_unknown_to_pypi_yields_unknown_section(tmp_path, monkeypatch, 
     def fail_pypi(pkg):
         raise FetchError("http 404", status=404)
 
+    def fail_stats(pkg):
+        raise FetchError("http 404", status=404)
+
     target = "agentpypi.cli._commands._packages.overview"
     monkeypatch.setattr(f"{target}.fetch_pypi", fail_pypi)
-    monkeypatch.setattr(
-        f"{target}.fetch_pypistats",
-        lambda pkg: (_ for _ in ()).throw(FetchError("http 404", status=404)),
-    )
+    monkeypatch.setattr(f"{target}.fetch_pypistats", fail_stats)
     monkeypatch.chdir(tmp_path)
     rc = main(["packages", "overview", "ghost-package", "--json"])
     assert rc == 0
@@ -147,3 +147,41 @@ def test_packages_with_no_subverb_prints_help_and_exits_1(tmp_path, monkeypatch,
     monkeypatch.chdir(tmp_path)
     rc = main(["packages"])
     assert rc == 1
+
+
+def test_deep_dive_env_failure_returns_2(tmp_path, monkeypatch, capsys):
+    """Single-pkg mode: both fetches fail with non-404 → exit 2 (env error)."""
+    from agentpypi._rubric._fetch import FetchError
+
+    def fail_pypi(pkg):
+        raise FetchError("fetch failed: URLError", status=None)
+
+    def fail_stats(pkg):
+        raise FetchError("fetch failed: URLError", status=None)
+
+    target = "agentpypi.cli._commands._packages.overview"
+    monkeypatch.setattr(f"{target}.fetch_pypi", fail_pypi)
+    monkeypatch.setattr(f"{target}.fetch_pypistats", fail_stats)
+    monkeypatch.chdir(tmp_path)
+    rc = main(["packages", "overview", "real-package", "--json"])
+    assert rc == 2
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["sections"][-1]["light"] == "unknown"
+
+
+def test_deep_dive_404_still_returns_0(tmp_path, monkeypatch, capsys):
+    """Single-pkg mode: pypi 404 is data, not env failure → exit 0."""
+    from agentpypi._rubric._fetch import FetchError
+
+    def fail_pypi(pkg):
+        raise FetchError("http 404", status=404)
+
+    def fail_stats(pkg):
+        raise FetchError("http 404", status=404)
+
+    target = "agentpypi.cli._commands._packages.overview"
+    monkeypatch.setattr(f"{target}.fetch_pypi", fail_pypi)
+    monkeypatch.setattr(f"{target}.fetch_pypistats", fail_stats)
+    monkeypatch.chdir(tmp_path)
+    rc = main(["packages", "overview", "ghost-pkg", "--json"])
+    assert rc == 0

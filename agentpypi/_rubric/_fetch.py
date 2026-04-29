@@ -8,8 +8,7 @@ the HTTP status. No retries, no on-disk cache.
 from __future__ import annotations
 
 import json
-import socket
-from urllib.error import HTTPError, URLError
+from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 from agentpypi import __version__
@@ -36,7 +35,9 @@ def get_json(url: str, *, timeout: float = 5.0) -> dict:
             raw = resp.read()
     except HTTPError as err:
         raise FetchError(f"http {err.code}", status=err.code) from err
-    except (URLError, socket.timeout, OSError) as err:
+    except OSError as err:
+        # OSError covers URLError and socket.timeout (both derive from it).
+        # SonarRule python:S5713 / Sonar:S5713.
         raise FetchError(f"fetch failed: {err.__class__.__name__}: {err}") from err
 
     try:

@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from agentpypi._rubric._dimension import Dimension, DimensionResult, Score
+from agentpypi._rubric._releases import max_nonyanked_upload
 
 
 def _now() -> datetime:
@@ -12,21 +13,10 @@ def _now() -> datetime:
 
 
 def _latest_nonyanked(pypi: dict) -> datetime | None:
-    releases = pypi.get("releases") or {}
-    latest: datetime | None = None
-    for files in releases.values():
-        for f in files or []:
-            if f.get("yanked"):
-                continue
-            ts = f.get("upload_time_iso_8601") or f.get("upload_time")
-            if not ts:
-                continue
-            t = datetime.fromisoformat(ts.replace("Z", "+00:00"))
-            if t.tzinfo is None:
-                t = t.replace(tzinfo=timezone.utc)
-            if latest is None or t > latest:
-                latest = t
-    return latest
+    """Latest non-yanked upload across all versions of *pypi*."""
+    per_version = [max_nonyanked_upload(files) for files in (pypi.get("releases") or {}).values()]
+    times = [t for t in per_version if t is not None]
+    return max(times) if times else None
 
 
 def _evaluate(pypi: dict | None, _stats: dict | None) -> DimensionResult:

@@ -108,7 +108,7 @@ def test_whoami_pip_conf_index_url_in_json_payload(
     pip_conf_dir = tmp_path / ".config" / "pip"
     pip_conf_dir.mkdir(parents=True)
     pip_conf = pip_conf_dir / "pip.conf"
-    pip_conf.write_text("[global]\n" "index-url = https://private.example.com/simple\n")
+    pip_conf.write_text("[global]\nindex-url = https://private.example.com/simple\n")
     monkeypatch.setenv("HOME", str(tmp_path))
     result = _read_pip_conf()
     assert result.get("index-url") == "https://private.example.com/simple"

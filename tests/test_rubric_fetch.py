@@ -32,7 +32,7 @@ def _handler_for(
             self.wfile.write(body)
 
         def log_message(self, *_: object) -> None:
-            pass
+            """Silence stderr access logs for cleaner pytest output."""
 
     return _Handler
 
@@ -99,7 +99,7 @@ def test_user_agent_sent():
             self.wfile.write(b"{}")
 
         def log_message(self, *_: object) -> None:
-            pass
+            """Silence stderr access logs for cleaner pytest output."""
 
     for url in _serve(CaptureHandler):
         get_json(url + "/x")

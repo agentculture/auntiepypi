@@ -15,7 +15,7 @@ import re
 from concurrent.futures import ThreadPoolExecutor
 
 from agentpypi._packages_config import ConfigError, load_package_names
-from agentpypi._rubric import DIMENSIONS
+from agentpypi._rubric import DIMENSIONS, Dimension
 from agentpypi._rubric._fetch import FetchError
 from agentpypi._rubric._runtime import evaluate_package, roll_up
 from agentpypi._rubric._sources import fetch_pypi, fetch_pypistats
@@ -36,23 +36,40 @@ def _validate_name(pkg: str) -> None:
         )
 
 
-def _fetch_pair(pkg: str) -> tuple[dict | None, dict | None, list[str]]:
-    """Fetch both sources for one package; return (pypi, stats, warnings)."""
+def _fetch_pair(
+    pkg: str,
+) -> tuple[dict | None, dict | None, list[str], bool]:
+    """Fetch both sources for one package.
+
+    Returns ``(pypi, stats, warnings, env_failure)``. ``env_failure`` is True
+    iff every attempted fetch failed for a *non-data* reason (network, 5xx,
+    timeout). A 404 is treated as data — "package not on PyPI" — and never
+    raises ``env_failure``.
+    """
     warnings: list[str] = []
     pypi: dict | None = None
     stats: dict | None = None
+    pypi_env_error = False
+    stats_env_error = False
+
     try:
         pypi = fetch_pypi(pkg)
     except FetchError as err:
         warnings.append(f"{pkg}: pypi.org {err.reason}")
         if err.status == 404:
-            # Don't bother pypistats for a package PyPI doesn't know.
-            return pypi, stats, warnings
+            # 404 is data, not env failure. Skip pypistats for this package.
+            return pypi, stats, warnings, False
+        pypi_env_error = True
+
     try:
         stats = fetch_pypistats(pkg)
     except FetchError as err:
         warnings.append(f"{pkg}: pypistats.org {err.reason}")
-    return pypi, stats, warnings
+        if err.status != 404:
+            stats_env_error = True
+
+    env_failure = pypi_env_error and stats_env_error
+    return pypi, stats, warnings, env_failure
 
 
 def _section_for_package(pkg: str, pypi: dict | None, stats: dict | None) -> dict:
@@ -87,7 +104,7 @@ def _section_for_package(pkg: str, pypi: dict | None, stats: dict | None) -> dic
     }
 
 
-def _section_for_dimension(pkg: str, pypi, stats, dimension) -> dict:
+def _section_for_dimension(pypi: dict | None, stats: dict | None, dimension: Dimension) -> dict:
     result = dimension.evaluate(pypi, stats)
     return {
         "category": "packages",
@@ -101,7 +118,7 @@ def _section_for_dimension(pkg: str, pypi, stats, dimension) -> dict:
 
 
 def _deep_dive(pkg: str, pypi: dict | None, stats: dict | None) -> dict:
-    sections = [_section_for_dimension(pkg, pypi, stats, d) for d in DIMENSIONS]
+    sections = [_section_for_dimension(pypi, stats, d) for d in DIMENSIONS]
     rolled = roll_up([d.evaluate(pypi, stats) for d in DIMENSIONS])
     sections.append(
         {
@@ -115,30 +132,36 @@ def _deep_dive(pkg: str, pypi: dict | None, stats: dict | None) -> dict:
 
 
 def _dashboard(names: list[str]) -> tuple[dict, list[str], int]:
-    """Return (payload, warnings, fetch_failures)."""
+    """Return (payload, warnings, env_failures).
+
+    ``env_failures`` counts packages where both upstream fetches failed for
+    non-data reasons (network/5xx). A 404 from pypi.org is treated as data
+    and does not contribute to the count.
+    """
     # Validate up-front so a malformed name surfaces as exit 1 (user error)
     # rather than confusing fetch failures.
     for n in names:
         _validate_name(n)
     sections: list[dict] = []
     warnings: list[str] = []
-    failures = 0
+    env_failures = 0
+    Result = tuple[dict | None, dict | None, list[str], bool]
     with ThreadPoolExecutor(max_workers=8) as ex:
         futures = {ex.submit(_fetch_pair, n): n for n in names}
-        results: dict[str, tuple[dict | None, dict | None, list[str]]] = {}
+        results: dict[str, Result] = {}
         for fut, n in futures.items():
             try:
                 results[n] = fut.result()
             except Exception as err:  # noqa: BLE001 - per-package isolation
                 warnings.append(f"{n}: unexpected fetch error: {err.__class__.__name__}: {err}")
-                results[n] = (None, None, [])
+                results[n] = (None, None, [], True)
     for n in names:
-        pypi, stats, warns = results[n]
+        pypi, stats, warns, env_failure = results[n]
         warnings.extend(warns)
-        if pypi is None and stats is None:
-            failures += 1
+        if env_failure:
+            env_failures += 1
         sections.append(_section_for_package(n, pypi, stats))
-    return {"subject": "packages", "sections": sections}, warnings, failures
+    return {"subject": "packages", "sections": sections}, warnings, env_failures
 
 
 def _render_text(payload: dict) -> str:
@@ -173,21 +196,22 @@ def cmd_packages_overview(args: argparse.Namespace) -> int:
                     "non-empty `packages = [...]` list"
                 ),
             ) from err
-        payload, warnings, failures = _dashboard(names)
+        payload, warnings, env_failures = _dashboard(names)
         for w in warnings:
             emit_diagnostic(f"warning: {w}")
-        if failures == len(names) and len(names) > 0:
-            _emit(payload, json_mode)
-            return EXIT_ENV_ERROR
         _emit(payload, json_mode)
+        if env_failures == len(names) and len(names) > 0:
+            return EXIT_ENV_ERROR
         return 0
 
     _validate_name(pkg)
-    pypi, stats, warnings = _fetch_pair(pkg)
+    pypi, stats, warnings, env_failure = _fetch_pair(pkg)
     for w in warnings:
         emit_diagnostic(f"warning: {w}")
     payload = _deep_dive(pkg, pypi, stats)
     _emit(payload, json_mode)
+    if env_failure:
+        return EXIT_ENV_ERROR
     return 0
 
 

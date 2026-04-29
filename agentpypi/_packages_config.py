@@ -34,7 +34,7 @@ def find_pyproject(start: Path | None = None) -> Path | None:
     can produce a precise error about the missing key); otherwise ``None``.
     """
     cwd = Path(start) if start is not None else Path.cwd()
-    home = Path(os.environ.get("HOME", "/"))
+    home = Path(os.environ.get("HOME", "/")).resolve()
     cur = cwd.resolve()
     first_match: Path | None = None
     while True:
