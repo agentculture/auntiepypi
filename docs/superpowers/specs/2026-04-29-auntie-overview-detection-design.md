@@ -238,8 +238,10 @@ flavor    = "pypiserver"       # required: "pypiserver" | "devpi" | "unknown"
 host      = "127.0.0.1"        # default
 port      = 8080               # required
 # Reserved for v0.3.0 lifecycle. v0.2.0 echoes them in --json output but
-# never acts on them. Loader validates "exactly one of {unit, dockerfile,
-# compose, command} OR managed_by = 'manual'".
+# never acts on them. The loader validates `managed_by` is in the closed
+# set; cross-field consistency (e.g. `managed_by="systemd-user"` requires
+# `unit`) is deliberately deferred to v0.3.0, where the lifecycle code
+# actually consumes these fields and can fail meaningfully.
 managed_by  = "systemd-user"   # "systemd-user" | "docker" | "compose" | "command" | "manual"
 unit        = "pypi.service"
 dockerfile  = "./infra/pypi/Dockerfile"
@@ -247,14 +249,15 @@ compose     = "./infra/pypi/docker-compose.yml"
 service     = "pypi"
 command     = ["pypi-server", "run", "-p", "8080", "/srv/wheels"]
 
-[tool.auntiepypi.servers]                                            # singleton table
+[tool.auntiepypi]                                                    # parent table; sibling of `packages`
 scan_processes = false         # default; --proc CLI flag overrides to true
 ```
 
-The array-of-tables (`[[tool.auntiepypi.servers]]`) and the scalar
-table (`[tool.auntiepypi.servers]`) coexist — `tomllib` parses the
-scalar table's keys onto a dict adjacent to the array. The loader
-handles both.
+`scan_processes` lives on the parent `[tool.auntiepypi]` table (sibling
+of `packages`), **not** on a singleton `[tool.auntiepypi.servers]`
+table — TOML forbids a key being both an array of tables and a scalar
+table at the same path. (This corrects an earlier draft of this spec
+that suggested they could coexist.)
 
 `_config.py` validates: `name` unique, `port` in `1..65535`, `flavor`
 in the closed set `{"pypiserver", "devpi", "unknown"}`, `managed_by` in

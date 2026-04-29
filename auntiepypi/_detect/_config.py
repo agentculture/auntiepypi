@@ -165,7 +165,12 @@ def load_servers(start: Path | None = None) -> ServersConfig:
             data = tomllib.load(f)
     except (OSError, tomllib.TOMLDecodeError) as err:
         raise ServerConfigError(f"cannot parse {found}: {err}") from err
-    auntie_table = data.get("tool", {}).get("auntiepypi", {})
+    tool = data.get("tool", {})
+    if not isinstance(tool, dict):
+        # Defensive: a TOML file with a non-table `tool` value is technically
+        # legal at the parser level but unusable; treat it as no-config.
+        return ServersConfig()
+    auntie_table = tool.get("auntiepypi", {})
     if not isinstance(auntie_table, dict):
         return ServersConfig()
     raw_specs = auntie_table.get("servers", [])

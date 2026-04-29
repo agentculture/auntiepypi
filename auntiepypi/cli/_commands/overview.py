@@ -9,6 +9,7 @@ are deliberately untouched.
 from __future__ import annotations
 
 import argparse
+import sys
 from dataclasses import replace
 
 from auntiepypi._detect import (
@@ -101,7 +102,13 @@ def _composite_no_arg(json_mode: bool, detections: list[Detection]) -> int:
 
 def cmd_overview(args: argparse.Namespace) -> int:
     json_mode = bool(getattr(args, "json", False))
-    cfg = _load_config_or_raise(scan_processes_override=bool(getattr(args, "proc", False)))
+    proc_flag = bool(getattr(args, "proc", False))
+    if proc_flag and sys.platform != "linux":
+        emit_diagnostic(
+            f"warning: --proc is Linux-only (current platform: {sys.platform}); "
+            "no /proc-sourced detections will appear"
+        )
+    cfg = _load_config_or_raise(scan_processes_override=proc_flag)
     detections = detect_all(cfg)
     target = args.target if args.target else None
 

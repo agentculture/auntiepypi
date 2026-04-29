@@ -23,6 +23,25 @@ def test_no_pyproject_returns_empty(tmp_path, monkeypatch) -> None:
     assert cfg == ServersConfig(specs=(), scan_processes=False)
 
 
+def test_non_dict_tool_table_returns_empty(tmp_path, monkeypatch) -> None:
+    """A pyproject with a non-table `tool` value must not crash the loader."""
+    # `tool = "string"` is unusual but legal TOML; loader should treat as no-config.
+    (tmp_path / "pyproject.toml").write_text('tool = "not-a-table"\n')
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.chdir(tmp_path)
+    cfg = load_servers()
+    assert cfg == ServersConfig()
+
+
+def test_non_dict_auntiepypi_table_returns_empty(tmp_path, monkeypatch) -> None:
+    """A pyproject where `tool.auntiepypi` exists but isn't a table is no-op."""
+    (tmp_path / "pyproject.toml").write_text('[tool]\nauntiepypi = "scalar"\n')
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.chdir(tmp_path)
+    cfg = load_servers()
+    assert cfg == ServersConfig()
+
+
 def test_pyproject_without_servers_key_returns_empty(tmp_path, monkeypatch) -> None:
     _write(tmp_path, '[tool.auntiepypi]\npackages = ["x"]\n')
     monkeypatch.setenv("HOME", str(tmp_path))

@@ -2,7 +2,11 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Status: v0.2.0 — `auntie overview` detection landed
+## Status: v0.3.0 — `auntie overview` detection landed (the v0.2.0 milestone)
+
+Semver shipped as 0.3.0 because 0.2.0 was burned on the
+`agentpypi → auntiepypi` rename PR. The spec and brainstorm artifacts
+under `docs/superpowers/` refer to this work as the **v0.2.0 milestone**.
 
 The CLI binary renamed `auntiepypi` → `auntie` (with `auntiepypi` kept
 as an alias console script). The composite `auntie overview` server

@@ -14,8 +14,10 @@ import urllib.error
 import urllib.request
 from dataclasses import dataclass
 
+from auntiepypi import __version__
+
 _MAX_BODY_BYTES = 4096
-_USER_AGENT = "auntie-detect/0"
+_USER_AGENT = f"auntie/{__version__}"
 
 
 @dataclass(frozen=True)
@@ -49,7 +51,11 @@ def probe_endpoint(
     Returns a :class:`ProbeOutcome` with the TCP/HTTP results. Never
     raises — every failure mode maps onto a field.
     """
-    url = f"http://{host}:{port}{path}"
+    # NOSONAR python:S5332 — probing localhost PyPI servers; HTTPS is not the
+    # protocol these servers speak (`pypi-server`, `devpi-server` default to
+    # plain HTTP for in-mesh use). We never dereference this for transport
+    # outside the local box.
+    url = f"http://{host}:{port}{path}"  # noqa: S310  # nosec B310
     if not _tcp_open(host, port, timeout):
         return ProbeOutcome(url=url, tcp_open=False, http_status=None, body=None, error=None)
     req = urllib.request.Request(url, headers={"User-Agent": _USER_AGENT, "Accept": "*/*"})

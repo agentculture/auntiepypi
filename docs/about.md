@@ -49,7 +49,11 @@ This is a deliberate choice. Tools that gate on opinion-shaped metrics
 get worked around. Tools that report on opinion-shaped metrics stay
 useful.
 
-## v0.2.0 — detect, don't supervise
+## v0.3.0 (the v0.2.0 milestone) — detect, don't supervise
+
+Semver bumped to 0.3.0 because 0.2.0 shipped the
+`agentpypi → auntiepypi` rename. The spec calls this the **v0.2.0
+detection milestone**.
 
 `auntie overview` now sees more than just the canonical-port devpi /
 pypiserver instances: it reads `[[tool.auntiepypi.servers]]` from

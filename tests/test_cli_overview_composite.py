@@ -191,6 +191,25 @@ def test_no_arg_without_packages_config(tmp_path, monkeypatch, capsys) -> None:
     assert "no [tool.auntiepypi].packages" in captured.err
 
 
+def test_proc_flag_on_non_linux_emits_stderr_warning(composite_env, capsys, monkeypatch) -> None:
+    """`--proc` on non-Linux is a no-op but must emit a stderr note."""
+    monkeypatch.setattr("auntiepypi.cli._commands.overview.sys.platform", "darwin")
+    monkeypatch.setattr("auntiepypi.cli._commands.overview.detect_all", _stub_detect([]))
+    rc = main(["overview", "--proc", "--json"])
+    assert rc == 0
+    captured = capsys.readouterr()
+    assert "--proc is Linux-only" in captured.err
+
+
+def test_proc_flag_on_linux_emits_no_warning(composite_env, capsys, monkeypatch) -> None:
+    monkeypatch.setattr("auntiepypi.cli._commands.overview.sys.platform", "linux")
+    monkeypatch.setattr("auntiepypi.cli._commands.overview.detect_all", _stub_detect([]))
+    rc = main(["overview", "--proc", "--json"])
+    assert rc == 0
+    captured = capsys.readouterr()
+    assert "--proc is Linux-only" not in captured.err
+
+
 def test_proc_flag_propagates_to_detect_all(composite_env, capsys, monkeypatch) -> None:
     """`--proc` overrides the config's scan_processes to True."""
     seen: list = []

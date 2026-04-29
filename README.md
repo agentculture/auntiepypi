@@ -5,10 +5,12 @@
 > It overviews packages on pypi.org and detects PyPI-flavored servers
 > running locally — informational, not gating.
 
-**Status:** v0.2.0 — read-only PyPI maturity dashboard + detection-driven
+**Status:** v0.3.0 (the v0.2.0 detection milestone — semver bumped to
+0.3.0 because 0.2.0 was burned on the recent `agentpypi → auntiepypi`
+rename PR). Read-only PyPI maturity dashboard + detection-driven
 servers section in the composite `auntie overview`. CLI binary is now
 `auntie` (`auntiepypi` stays as an alias). Lifecycle / serve work is
-planned for v0.3.0 (no new noun).
+planned for the next minor (no new noun).
 
 ## Quick start
 

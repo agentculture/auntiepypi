@@ -44,7 +44,10 @@ def _build_parser() -> argparse.ArgumentParser:
     # `auntie 0.x.y` and `auntiepypi --version` says `auntiepypi 0.x.y`. Both
     # console scripts route here.
     parser = _ArgumentParser(
-        description="auntie — agent-first CLI for the AgentCulture Python distribution pipe.",
+        description=(
+            "auntie — agent-first CLI for the AgentCulture Python distribution "
+            "pipe. (Python distribution: auntiepypi)"
+        ),
     )
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     sub = parser.add_subparsers(dest="command")

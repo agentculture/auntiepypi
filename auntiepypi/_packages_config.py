@@ -23,7 +23,10 @@ def _has_auntiepypi_table(path: Path) -> bool:
             data = tomllib.load(f)
     except (OSError, tomllib.TOMLDecodeError):
         return False
-    return isinstance(data.get("tool", {}).get("auntiepypi"), dict)
+    tool = data.get("tool", {})
+    if not isinstance(tool, dict):
+        return False
+    return isinstance(tool.get("auntiepypi"), dict)
 
 
 def find_pyproject(start: Path | None = None) -> Path | None:
