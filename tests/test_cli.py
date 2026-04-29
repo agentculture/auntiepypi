@@ -112,7 +112,7 @@ def test_module_main_dispatches() -> None:
 
 
 def test_unknown_top_level_verb_fails(capsys: pytest.CaptureFixture[str]) -> None:
-    """`auntiepypi online ...` is in the catalog but not registered as a subcommand."""
+    """`auntiepypi online ...` is neither in the catalog nor registered, so argparse rejects it."""
     with pytest.raises(SystemExit) as exc:
         main(["online", "status", "shushu"])
     assert exc.value.code != 0
