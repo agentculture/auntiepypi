@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-04-29
+
+### Added
+
+- `auntiepypi/_detect/` — declaration-driven inventory of running PyPI servers. Three detectors (`_declared`, `_port`, `_proc`) plus a runtime that merges them with augment + suppress-absent-when-declared semantics.
+- `[[tool.auntiepypi.servers]]` config schema. Per-server `name` / `flavor` / `host` / `port` plus reserved-for-v0.3.0 lifecycle fields (`managed_by`, `unit`, `dockerfile`, `compose`, `service`, `command`).
+- `[tool.auntiepypi].scan_processes` boolean (parent-table sibling of `packages`) to opt into the `/proc` scan from config; equivalent to passing `--proc`.
+- `auntie overview --proc` flag. Linux-only `/proc` walker that finds `pypi-server` / `devpi-server` processes and ties them to listening ports via `/proc/<pid>/fd/*` + `/proc/net/tcp`.
+- `auntie` console script registered alongside `auntiepypi` (both point at `auntiepypi.cli:main`). Argparse `prog` is now derived from `argv[0]` so `auntie --version` says `auntie` and `auntiepypi --version` says `auntiepypi`.
+- `docs/deploy/` — systemd-user unit templates for `pypi-server` and `devpi-server` plus a one-page README with declaration snippets.
+
+### Changed
+
+- `auntie overview`'s server section group now consumes `_detect.detect_all()` instead of `_probes.probe_status` directly. Declared servers and any extras the augment scan finds appear in the composite report.
+- `auntie overview <TARGET>` resolution priority is now: detection name → bare flavor alias → configured package → zero-target.
+- Composite `auntie overview` subject string changes from `"auntiepypi"` to `"auntie"`.
+- `learn`'s `planned` array is now `[]`. `learn --json`'s `tool` field flips to `"auntie"` with a new `package` field for the underlying distribution. The `local` noun (sketched in earlier roadmaps) is permanently dropped; v0.3.0 lifecycle work will land on `doctor` or top-level verbs, not under a noun.
+
+### Notes
+
+- `_probes/` and `doctor --fix` are deliberately untouched. They will be unified with the new serve work in a future milestone.
+
 ## [0.2.0] - 2026-04-29
 
 ### Changed
