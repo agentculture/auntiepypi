@@ -18,6 +18,10 @@ from auntiepypi._detect._detection import Detection
 from auntiepypi._detect._http import ProbeOutcome, probe_endpoint
 
 DEFAULT_PORTS: tuple[int, ...] = (3141, 8080)
+# Conventional flavor for each default port — used as the *expected* flavor when
+# nothing is listening, so the report says "pypiserver:8080 absent" rather than
+# "unknown:8080 absent" for ports we recognise.
+_PORT_FLAVOR: dict[int, str] = {3141: "devpi", 8080: "pypiserver"}
 _DEFAULT_HOST = "127.0.0.1"
 _TIMEOUT = 1.0
 _HREF_DIR = re.compile(rb'<a\s+href=["\'][^"\']+/["\']', re.IGNORECASE)
@@ -54,9 +58,10 @@ def _content_type(outcome: ProbeOutcome) -> str | None:
 
 def _detection_for(host: str, port: int, outcome: ProbeOutcome) -> Detection:
     if not outcome.tcp_open:
+        expected = _PORT_FLAVOR.get(port, "unknown")
         return Detection(
-            name=f"unknown:{port}",
-            flavor="unknown",
+            name=f"{expected}:{port}",
+            flavor=expected,
             host=host,
             port=port,
             url=outcome.url,

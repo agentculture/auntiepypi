@@ -1,66 +1,58 @@
-"""``auntiepypi overview`` — composite of packages + servers sections.
+"""``auntie overview`` — composite of packages + detected servers.
 
-v0.0.1 ran the server-flavor probes; v0.1.0 promotes this verb to a
-*composite* report:
-
-- No arg → emit a packages section group (rolled-up dashboard from
-  ``[tool.auntiepypi].packages``) followed by a servers section group
-  (the existing ``_probes/`` flavor probes).
-- With arg → resolve in priority: server flavor → existing single-probe
-  semantics; configured package → delegate to ``packages overview``;
-  otherwise zero-target stderr warning + exit 0.
-
-Each section carries an explicit ``category`` key (``"packages"`` or
-``"servers"``) so agents can group by domain.
+v0.2.0 swaps the server section group's data source from ``_probes/``
+to ``_detect/``. Declared servers, default-port scan results, and
+``--proc`` finds all surface here. ``_probes/`` and ``doctor --fix``
+are deliberately untouched.
 """
 
 from __future__ import annotations
 
 import argparse
+from dataclasses import replace
 
+from auntiepypi._detect import (
+    Detection,
+    ServerConfigError,
+    ServersConfig,
+    detect_all,
+    load_servers,
+)
 from auntiepypi._packages_config import ConfigError, load_package_names
-from auntiepypi._probes import PROBES, probe_status
 from auntiepypi.cli._commands._packages.overview import (
     _dashboard,
     _deep_dive,
     _emit,
     _fetch_pair,
 )
+from auntiepypi.cli._errors import EXIT_USER_ERROR, AfiError
 from auntiepypi.cli._output import emit_diagnostic, emit_result
 
-_SUBJECT = "auntiepypi"
+_SUBJECT = "auntie"
 
 
-def _server_section(probe_result: dict) -> dict:
-    fields = [
-        {"name": "port", "value": str(probe_result.get("port", ""))},
-        {"name": "url", "value": probe_result.get("url", "")},
-        {"name": "status", "value": probe_result.get("status", "")},
-    ]
-    if probe_result.get("detail"):
-        fields.append({"name": "detail", "value": probe_result["detail"]})
-    light_map = {"up": "green", "down": "red", "absent": "unknown"}
-    return {
-        "category": "servers",
-        "title": probe_result.get("name", "?"),
-        "light": light_map.get(probe_result.get("status", ""), "unknown"),
-        "fields": fields,
-    }
+def _load_config_or_raise(scan_processes_override: bool) -> ServersConfig:
+    try:
+        cfg = load_servers()
+    except ServerConfigError as err:
+        raise AfiError(
+            code=EXIT_USER_ERROR,
+            message=str(err),
+            remediation=(
+                "fix [[tool.auntiepypi.servers]] in pyproject.toml; see "
+                "docs/superpowers/specs/2026-04-29-auntie-overview-detection-design.md"
+            ),
+        ) from err
+    if scan_processes_override:
+        cfg = replace(cfg, scan_processes=True)
+    return cfg
 
 
-def _all_servers_sections() -> list[dict]:
-    return [_server_section(probe_status(p)) for p in PROBES]
-
-
-def _server_target(target: str) -> dict | None:
-    for p in PROBES:
-        if p.name == target:
-            return _server_section(probe_status(p))
-    return None
+def _server_sections(detections: list[Detection]) -> list[dict]:
+    return [d.to_section() for d in detections]
 
 
 def _try_package_target(target: str) -> dict | None:
-    """Return the deep-dive payload if `target` is a configured package."""
     try:
         names = load_package_names()
     except ConfigError:
@@ -73,58 +65,72 @@ def _try_package_target(target: str) -> dict | None:
     return _deep_dive(target, pypi, stats)
 
 
-def _composite_no_arg(json_mode: bool) -> int:
+def _detection_target(
+    detections: list[Detection], target: str
+) -> Detection | None:
+    """Return the matching Detection or None.
+
+    Resolution priority:
+      1. Exact name match.
+      2. Bare flavor alias — first detection with `flavor == target`.
+    """
+    for d in detections:
+        if d.name == target:
+            return d
+    for d in detections:
+        if d.flavor == target:
+            return d
+    return None
+
+
+def _composite_no_arg(json_mode: bool, detections: list[Detection]) -> int:
     sections: list[dict] = []
-    # Packages: only when configured; otherwise omit silently and warn.
     try:
         names = load_package_names()
     except ConfigError:
         names = []
-        emit_diagnostic("warning: no [tool.auntiepypi].packages configured; showing servers only")
+        emit_diagnostic(
+            "warning: no [tool.auntiepypi].packages configured; showing servers only"
+        )
     if names:
         payload, warnings, _failures = _dashboard(names)
         for w in warnings:
             emit_diagnostic(f"warning: {w}")
         sections.extend(payload["sections"])
-    sections.extend(_all_servers_sections())
-
+    sections.extend(_server_sections(detections))
     payload = {"subject": _SUBJECT, "sections": sections}
     _emit(payload, json_mode)
     return 0
 
 
 def cmd_overview(args: argparse.Namespace) -> int:
-    target = args.target if args.target else None
     json_mode = bool(getattr(args, "json", False))
+    cfg = _load_config_or_raise(
+        scan_processes_override=bool(getattr(args, "proc", False))
+    )
+    detections = detect_all(cfg)
+    target = args.target if args.target else None
 
     if target is None:
-        return _composite_no_arg(json_mode)
+        return _composite_no_arg(json_mode, detections)
 
-    # Priority 1: server flavor.
-    server = _server_target(target)
-    if server is not None:
-        payload = {"subject": _SUBJECT, "sections": [server]}
+    match = _detection_target(detections, target)
+    if match is not None:
+        payload = {"subject": match.name, "sections": [match.to_section()]}
         _emit(payload, json_mode)
         return 0
 
-    # Priority 2: configured package.
     pkg_payload = _try_package_target(target)
     if pkg_payload is not None:
-        # Use the package subject so consumers can route on it.
         _emit(pkg_payload, json_mode)
         return 0
 
-    # Priority 3: zero-target report (preserved v0.0.1 semantics).
-    payload = {
-        "subject": _SUBJECT,
-        "sections": [],
-        "target": target,
-        "note": (
-            f"target {target!r} not recognised; emitting zero-target report "
-            "(use `auntiepypi overview` with no arg for the default scan)"
-        ),
-    }
-    emit_diagnostic(f"warning: {payload['note']}")
+    note = (
+        f"target {target!r} not recognised; emitting zero-target report "
+        "(use `auntie overview` with no arg for the default scan)"
+    )
+    emit_diagnostic(f"warning: {note}")
+    payload = {"subject": _SUBJECT, "sections": [], "target": target, "note": note}
     if json_mode:
         emit_result(payload, json_mode=True)
     else:
@@ -135,16 +141,21 @@ def cmd_overview(args: argparse.Namespace) -> int:
 def register(sub: argparse._SubParsersAction) -> None:
     p = sub.add_parser(
         "overview",
-        help="Composite report: packages dashboard + local PyPI server probes.",
+        help="Composite report: packages dashboard + detected PyPI servers.",
     )
     p.add_argument(
         "target",
         nargs="?",
         default=None,
         help=(
-            "Optional target: a server flavor (devpi / pypiserver) or a "
-            "configured package name. Omit for the full composite."
+            "Optional target: a detection name (declared or `<flavor>:<port>`), "
+            "a bare flavor (`devpi` / `pypiserver`), or a configured package name."
         ),
+    )
+    p.add_argument(
+        "--proc",
+        action="store_true",
+        help="Opt-in /proc scan for running PyPI servers (Linux only; no-op elsewhere).",
     )
     p.add_argument("--json", action="store_true", help="Emit structured JSON.")
     p.set_defaults(func=cmd_overview)
