@@ -1,0 +1,30 @@
+# systemd-user unit template for devpi-server.
+#
+# Install:
+#   mkdir -p ~/.config/systemd/user
+#   cp devpi.service ~/.config/systemd/user/
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now devpi.service
+#
+# After install, declare it in pyproject.toml so `auntie overview` finds it:
+#
+#   [[tool.auntiepypi.servers]]
+#   name = "dev"
+#   flavor = "devpi"
+#   port = 3141
+#   managed_by = "systemd-user"
+#   unit = "devpi.service"
+
+[Unit]
+Description=devpi-server (auntiepypi managed; v0.3.0 will integrate)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/devpi-server --host 127.0.0.1 --port 3141
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target
