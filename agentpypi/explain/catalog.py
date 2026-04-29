@@ -113,7 +113,7 @@ servers.
 ## JSON envelope
 
     {
-      "subject": "agentpypi overview",
+      "subject": "agentpypi",
       "sections": [
         {"category": "packages", "title": "<pkg>", "light": "green|...", "fields": [...]},
         {"category": "servers",  "title": "<flavor>", "light": "...", "fields": [...]}
@@ -228,9 +228,10 @@ _LOCAL = """\
 Run / mirror / publish to an in-mesh PyPI index so AgentCulture agents can
 exchange wheels without leaving the org's trust boundary.
 
-This noun is **not yet registered** in v0.0.1. v0.0.1 ships `overview`
-and `doctor` instead, which probe localhost for PyPI server flavors but
-don't yet manage one.
+This noun is **not yet registered**. v0.1.0 ships `overview`, `doctor`,
+and `packages overview` — the first two probe localhost for PyPI server
+flavors; the third reports on remote PyPI packages. None of them manage
+a local index yet.
 
 ## Planned verbs
 

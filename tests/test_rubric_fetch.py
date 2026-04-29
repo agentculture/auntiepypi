@@ -1,40 +1,44 @@
-"""Tests for _rubric/_fetch.get_json — stdlib urllib wrapper."""
+"""Tests for _rubric/_fetch.get_json — stdlib urllib wrapper.
+
+Each test builds its own handler class via ``_handler_for`` to avoid
+shared mutable class state under ``pytest -n auto`` (xdist).
+"""
 
 from __future__ import annotations
 
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from typing import Iterator
 
 import pytest
 
 from agentpypi._rubric._fetch import FetchError, get_json
 
 
-class _Handler(BaseHTTPRequestHandler):
-    """Configurable handler. Behavior set by class attrs before each test."""
+def _handler_for(
+    *, status: int = 200, body: bytes = b'{"ok": true}', sleep: float = 0.0
+) -> type[BaseHTTPRequestHandler]:
+    """Return a fresh handler class with the given response baked in."""
 
-    status: int = 200
-    body: bytes = b'{"ok": true}'
-    sleep: float = 0.0
+    class _Handler(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:  # noqa: N802
+            if sleep:
+                time.sleep(sleep)
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
 
-    def do_GET(self) -> None:  # noqa: N802
-        if self.sleep:
-            time.sleep(self.sleep)
-        self.send_response(self.status)
-        self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", str(len(self.body)))
-        self.end_headers()
-        self.wfile.write(self.body)
+        def log_message(self, *_: object) -> None:
+            pass
 
-    def log_message(self, *_: object) -> None:  # silence
-        pass
+    return _Handler
 
 
-@pytest.fixture
-def server():
-    """Start a localhost HTTP server on an ephemeral port."""
-    srv = ThreadingHTTPServer(("127.0.0.1", 0), _Handler)
+def _serve(handler: type[BaseHTTPRequestHandler]) -> Iterator[str]:
+    srv = ThreadingHTTPServer(("127.0.0.1", 0), handler)
     thread = threading.Thread(target=srv.serve_forever, daemon=True)
     thread.start()
     try:
@@ -44,45 +48,35 @@ def server():
         thread.join(timeout=2)
 
 
-def test_200_returns_dict(server):
-    _Handler.status = 200
-    _Handler.body = b'{"hello": "world"}'
-    _Handler.sleep = 0.0
-    assert get_json(server + "/x") == {"hello": "world"}
+def test_200_returns_dict():
+    for url in _serve(_handler_for(status=200, body=b'{"hello": "world"}')):
+        assert get_json(url + "/x") == {"hello": "world"}
 
 
-def test_404_raises_fetcherror_with_status(server):
-    _Handler.status = 404
-    _Handler.body = b"not found"
-    _Handler.sleep = 0.0
-    with pytest.raises(FetchError) as excinfo:
-        get_json(server + "/x")
-    assert excinfo.value.status == 404
+def test_404_raises_fetcherror_with_status():
+    for url in _serve(_handler_for(status=404, body=b"not found")):
+        with pytest.raises(FetchError) as excinfo:
+            get_json(url + "/x")
+        assert excinfo.value.status == 404
 
 
-def test_500_raises_fetcherror_with_status(server):
-    _Handler.status = 500
-    _Handler.body = b"server error"
-    _Handler.sleep = 0.0
-    with pytest.raises(FetchError) as excinfo:
-        get_json(server + "/x")
-    assert excinfo.value.status == 500
+def test_500_raises_fetcherror_with_status():
+    for url in _serve(_handler_for(status=500, body=b"server error")):
+        with pytest.raises(FetchError) as excinfo:
+            get_json(url + "/x")
+        assert excinfo.value.status == 500
 
 
-def test_malformed_json_raises_fetcherror(server):
-    _Handler.status = 200
-    _Handler.body = b"not json at all"
-    _Handler.sleep = 0.0
-    with pytest.raises(FetchError, match="unexpected response shape"):
-        get_json(server + "/x")
+def test_malformed_json_raises_fetcherror():
+    for url in _serve(_handler_for(status=200, body=b"not json at all")):
+        with pytest.raises(FetchError, match="unexpected response shape"):
+            get_json(url + "/x")
 
 
-def test_timeout_raises_fetcherror(server):
-    _Handler.status = 200
-    _Handler.body = b'{"ok": true}'
-    _Handler.sleep = 0.5
-    with pytest.raises(FetchError, match="fetch failed"):
-        get_json(server + "/x", timeout=0.1)
+def test_timeout_raises_fetcherror():
+    for url in _serve(_handler_for(status=200, sleep=0.5)):
+        with pytest.raises(FetchError, match="fetch failed"):
+            get_json(url + "/x", timeout=0.1)
 
 
 def test_connection_refused_raises_fetcherror():
@@ -91,7 +85,7 @@ def test_connection_refused_raises_fetcherror():
         get_json("http://127.0.0.1:1/", timeout=1.0)
 
 
-def test_user_agent_sent(server):
+def test_user_agent_sent():
     """Confirm the UA header is what we promise downstream."""
     received_ua: dict[str, str] = {}
 
@@ -106,15 +100,8 @@ def test_user_agent_sent(server):
         def log_message(self, *_: object) -> None:
             pass
 
-    srv = ThreadingHTTPServer(("127.0.0.1", 0), CaptureHandler)
-    thr = threading.Thread(target=srv.serve_forever, daemon=True)
-    thr.start()
-    try:
-        url = f"http://{srv.server_address[0]}:{srv.server_address[1]}"
+    for url in _serve(CaptureHandler):
         get_json(url + "/x")
-    finally:
-        srv.shutdown()
-        thr.join(timeout=2)
 
     assert received_ua["ua"].startswith("agentpypi/")
     assert "github.com/agentculture/agentpypi" in received_ua["ua"]

@@ -14,8 +14,8 @@ classifiers = [
     "Intended Audience :: Developers",
 ]
 dependencies = [
-    # Zero runtime deps at v0.0.1. Stdlib only (argparse, json, tomllib,
-    # urllib.request, socket, subprocess). Add only when a verb needs
+    # Zero runtime deps. Stdlib only (argparse, json, tomllib,
+    # urllib.request, socket, subprocess, concurrent.futures). Add only when a verb needs
     # something stdlib can't do.
 ]
 

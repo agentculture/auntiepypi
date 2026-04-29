@@ -34,10 +34,10 @@ def _good_stats() -> dict:
 
 @pytest.fixture
 def patched_sources(monkeypatch):
-    from agentpypi._rubric import _sources
-
-    monkeypatch.setattr(_sources, "fetch_pypi", lambda pkg: _good_pypi(pkg))
-    monkeypatch.setattr(_sources, "fetch_pypistats", lambda pkg: _good_stats())
+    """Patch the consumer module's local bindings (from ... import fetch_pypi)."""
+    target = "agentpypi.cli._commands._packages.overview"
+    monkeypatch.setattr(f"{target}.fetch_pypi", lambda pkg: _good_pypi(pkg))
+    monkeypatch.setattr(f"{target}.fetch_pypistats", lambda pkg: _good_stats())
 
 
 def test_overview_no_arg_requires_config(tmp_path, monkeypatch, capsys):
@@ -100,16 +100,15 @@ def test_overview_invalid_pkg_name_exits_1(tmp_path, monkeypatch, capsys):
 
 def test_overview_unknown_to_pypi_yields_unknown_section(tmp_path, monkeypatch, capsys):
     """Package that pypi.org returns 404 for: deep-dive lights all unknown."""
-    from agentpypi._rubric import _sources
     from agentpypi._rubric._fetch import FetchError
 
     def fail_pypi(pkg):
         raise FetchError("http 404", status=404)
 
-    monkeypatch.setattr(_sources, "fetch_pypi", fail_pypi)
+    target = "agentpypi.cli._commands._packages.overview"
+    monkeypatch.setattr(f"{target}.fetch_pypi", fail_pypi)
     monkeypatch.setattr(
-        _sources,
-        "fetch_pypistats",
+        f"{target}.fetch_pypistats",
         lambda pkg: (_ for _ in ()).throw(FetchError("http 404", status=404)),
     )
     monkeypatch.chdir(tmp_path)
@@ -119,3 +118,32 @@ def test_overview_unknown_to_pypi_yields_unknown_section(tmp_path, monkeypatch, 
     summary = payload["sections"][-1]
     assert summary["title"] == "_summary"
     assert summary["light"] == "unknown"
+
+
+def test_overview_all_fetches_fail_in_dashboard_returns_2(tmp_path, monkeypatch, capsys):
+    """Dashboard mode: every package's both fetches fail → exit 2 (env error)."""
+    from agentpypi._rubric._fetch import FetchError
+
+    def fail_pypi(pkg):
+        raise FetchError("fetch failed: URLError", status=None)
+
+    def fail_stats(pkg):
+        raise FetchError("fetch failed: URLError", status=None)
+
+    target = "agentpypi.cli._commands._packages.overview"
+    monkeypatch.setattr(f"{target}.fetch_pypi", fail_pypi)
+    monkeypatch.setattr(f"{target}.fetch_pypistats", fail_stats)
+    (tmp_path / "pyproject.toml").write_text('[tool.agentpypi]\npackages = ["alpha", "beta"]\n')
+    monkeypatch.chdir(tmp_path)
+    rc = main(["packages", "overview", "--json"])
+    assert rc == 2
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["subject"] == "packages"
+    assert all(s["light"] == "unknown" for s in payload["sections"])
+
+
+def test_packages_with_no_subverb_prints_help_and_exits_1(tmp_path, monkeypatch, capsys):
+    """Bare `agentpypi packages` (no subverb) → help + EXIT_USER_ERROR."""
+    monkeypatch.chdir(tmp_path)
+    rc = main(["packages"])
+    assert rc == 1

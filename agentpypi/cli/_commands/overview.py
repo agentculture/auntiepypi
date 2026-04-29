@@ -28,7 +28,7 @@ from agentpypi.cli._commands._packages.overview import (
 )
 from agentpypi.cli._output import emit_diagnostic, emit_result
 
-_SUBJECT = "agentpypi overview"
+_SUBJECT = "agentpypi"
 
 
 def _server_section(probe_result: dict) -> dict:

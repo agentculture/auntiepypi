@@ -30,10 +30,10 @@ def _good_pypi(name="x"):
 
 @pytest.fixture
 def composite_env(tmp_path, monkeypatch):
-    from agentpypi._rubric import _sources
-
-    monkeypatch.setattr(_sources, "fetch_pypi", lambda pkg: _good_pypi(pkg))
-    monkeypatch.setattr(_sources, "fetch_pypistats", lambda pkg: {"data": {"last_week": 100}})
+    """Patch the consumer module's local bindings."""
+    target = "agentpypi.cli._commands._packages.overview"
+    monkeypatch.setattr(f"{target}.fetch_pypi", lambda pkg: _good_pypi(pkg))
+    monkeypatch.setattr(f"{target}.fetch_pypistats", lambda pkg: {"data": {"last_week": 100}})
     (tmp_path / "pyproject.toml").write_text('[tool.agentpypi]\npackages = ["alpha"]\n')
     monkeypatch.chdir(tmp_path)
 
@@ -72,3 +72,51 @@ def test_with_unknown_target_zero_target_report(composite_env, capsys):
     payload = json.loads(capsys.readouterr().out)
     assert payload["sections"] == []
     assert payload.get("note")
+
+
+def test_no_arg_without_packages_config_emits_servers_only(tmp_path, monkeypatch, capsys):
+    """When no [tool.agentpypi].packages is configured, composite emits only servers."""
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.chdir(tmp_path)
+    rc = main(["overview", "--json"])
+    assert rc == 0
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+    cats = {s["category"] for s in payload["sections"]}
+    assert cats == {"servers"}
+    assert "no [tool.agentpypi].packages" in captured.err
+
+
+def test_pkg_target_without_config_falls_through_to_zero_target(tmp_path, monkeypatch, capsys):
+    """If a package-named target is given but no config exists, fall through."""
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.chdir(tmp_path)
+    rc = main(["overview", "some-pkg", "--json"])
+    assert rc == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["sections"] == []
+    assert payload.get("note")
+
+
+def test_server_target_with_detail_field(monkeypatch, tmp_path, capsys):
+    """probe_status returning a detail key should populate a detail field."""
+    from agentpypi.cli._commands import overview as overview_mod
+
+    fake_probe = {
+        "name": "devpi",
+        "port": 3141,
+        "url": "http://x",
+        "status": "down",
+        "detail": "http 500",
+    }
+    monkeypatch.setattr(overview_mod, "probe_status", lambda p, **kw: fake_probe)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.chdir(tmp_path)
+    rc = main(["overview", "devpi", "--json"])
+    assert rc == 0
+    payload = json.loads(capsys.readouterr().out)
+    section = payload["sections"][0]
+    field_names = {f["name"] for f in section["fields"]}
+    assert "detail" in field_names
+    detail_field = next(f for f in section["fields"] if f["name"] == "detail")
+    assert detail_field["value"] == "http 500"
