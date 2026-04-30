@@ -274,7 +274,7 @@ def test_find_by_port_wrong_port_returns_none(tmp_path):
     (fd_dir / "3").symlink_to("socket:[9999]")
     net_dir = proc / "net"
     net_dir.mkdir()
-    # 0050 = 80, not 8080
+    # The hex literal "0050" in the line below decodes to port 80 (not 8080).
     (net_dir / "tcp").write_text(
         "  sl local rem st\n"
         "   0: 0100007F:0050 00000000:0000 0A 00000000:00000000 00:00000000 "

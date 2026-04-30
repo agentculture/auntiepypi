@@ -22,6 +22,7 @@ from __future__ import annotations
 import os
 import signal
 import subprocess
+import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -146,23 +147,23 @@ def _resolve_target_pid(declaration: ServerSpec) -> tuple[int | None, str]:
     the port-walk fallback.
     """
     record = _pid.read(declaration.name, declaration.port)
-    if record is not None:
-        if declaration.command:
-            verified = _pid.find_by_port(
-                declaration.port,
-                expected_argv=list(declaration.command),
-            )
-            # If find_by_port returns None on non-Linux, trust the PID
-            # file (best we can do without /proc). On Linux, require the
-            # PID file's PID to match the actual listener.
-            import sys as _sys
-
-            if _sys.platform == "linux" and verified is not None and verified != record.pid:
-                # Stale-but-live PID in the file; the actual listener is a
-                # different process. Clear and fall through.
-                _pid.clear(declaration.name, declaration.port)
-            else:
-                return record.pid, "pid-file"
+    if record is not None and declaration.command:
+        verified = _pid.find_by_port(
+            declaration.port,
+            expected_argv=list(declaration.command),
+        )
+        # If find_by_port returns None on non-Linux, trust the PID
+        # file (best we can do without /proc). On Linux, require the
+        # PID file's PID to match the actual listener.
+        if sys.platform == "linux" and verified is not None and verified != record.pid:
+            # Stale-but-live PID in the file; the actual listener is a
+            # different process. Clear and fall through.
+            _pid.clear(declaration.name, declaration.port)
+        else:
+            return record.pid, "pid-file"
+    elif record is not None:
+        # No declared command to verify against; trust the record.
+        return record.pid, "pid-file"
     if declaration.command:
         pid = _pid.find_by_port(
             declaration.port,

@@ -90,7 +90,8 @@ def _resolve_one_spec(target: str, specs: list[ServerSpec], decisions: Decisions
         raise AfiError(
             code=EXIT_USER_ERROR,
             message=(
-                f"target {target!r} is ambiguous " f"({len(matching)} declarations share the name)"
+                f"target {target!r} is ambiguous "
+                + f"({len(matching)} declarations share the name)"
             ),
             remediation=f"re-run with --decide=duplicate:{target}{options}",
         )
@@ -169,6 +170,44 @@ def _render_text(verb: str, results: list[tuple[str, ActionResult]]) -> str:
     return f"auntie {verb}:\n" + "\n".join(lines)
 
 
+def _bare_invocation_error(verb: str) -> AfiError:
+    return AfiError(
+        code=EXIT_USER_ERROR,
+        message=_bare_invocation_message(verb),
+        remediation=(
+            f"give a server name (`auntie {verb} <name>`) or use "
+            f"`auntie {verb} --all` to act on every supervised declaration"
+        ),
+    )
+
+
+def _collect_pairs(
+    target: str | None,
+    all_servers: bool,
+    cfg,
+    detections: list[Detection],
+    decisions: Decisions,
+    skipped: list[ServerSpec],
+) -> list[_Pair]:
+    """Build the (name, detection, spec) list for the lifecycle dispatch loop."""
+    if all_servers:
+        return [
+            _Pair(name=s.name, detection=_detection_for_spec(detections, s), spec=s)
+            for s in _supervised_specs(cfg.specs, skipped_out=skipped)
+        ]
+    spec = _resolve_one_spec(target or "", cfg.specs, decisions)
+    if (spec.managed_by or "manual") not in SUPERVISED_MODES:
+        _refuse_unsupervised(spec)
+    return [_Pair(name=spec.name, detection=_detection_for_spec(detections, spec), spec=spec)]
+
+
+def _emit_lifecycle_output(
+    verb: str, results: list[tuple[str, ActionResult]], *, json_mode: bool
+) -> None:
+    payload = _build_payload(verb, results) if json_mode else _render_text(verb, results)
+    emit_result(payload, json_mode=json_mode)
+
+
 def run_lifecycle(args: argparse.Namespace, *, verb: str, action: Action) -> int:
     """Shared entry point for the three lifecycle verbs."""
     target = getattr(args, "target", None)
@@ -177,40 +216,19 @@ def run_lifecycle(args: argparse.Namespace, *, verb: str, action: Action) -> int
     decisions = parse_decisions(getattr(args, "decide", None) or [])
 
     if target is None and not all_servers:
-        raise AfiError(
-            code=EXIT_USER_ERROR,
-            message=_bare_invocation_message(verb),
-            remediation=(
-                f"give a server name (`auntie {verb} <name>`) or use "
-                f"`auntie {verb} --all` to act on every supervised declaration"
-            ),
-        )
+        raise _bare_invocation_error(verb)
 
     cfg, _gaps = load_servers_lenient()
     detections = detect_all(cfg)
 
-    pairs: list[_Pair] = []
     skipped: list[ServerSpec] = []
-    if all_servers:
-        for spec in _supervised_specs(cfg.specs, skipped_out=skipped):
-            det = _detection_for_spec(detections, spec)
-            pairs.append(_Pair(name=spec.name, detection=det, spec=spec))
-    else:
-        spec = _resolve_one_spec(target or "", cfg.specs, decisions)
-        if (spec.managed_by or "manual") not in SUPERVISED_MODES:
-            _refuse_unsupervised(spec)
-        det = _detection_for_spec(detections, spec)
-        pairs.append(_Pair(name=spec.name, detection=det, spec=spec))
+    pairs = _collect_pairs(target, all_servers, cfg, detections, decisions, skipped)
 
-    results: list[tuple[str, ActionResult]] = []
-    for pair in pairs:
-        res = _actions.dispatch(action, pair.detection, pair.spec)
-        results.append((pair.name, res))
+    results: list[tuple[str, ActionResult]] = [
+        (pair.name, _actions.dispatch(action, pair.detection, pair.spec)) for pair in pairs
+    ]
 
-    if json_mode:
-        emit_result(_build_payload(verb, results), json_mode=True)
-    else:
-        emit_result(_render_text(verb, results), json_mode=False)
+    _emit_lifecycle_output(verb, results, json_mode=json_mode)
 
     if all_servers and skipped:
         from auntiepypi.cli._output import emit_diagnostic

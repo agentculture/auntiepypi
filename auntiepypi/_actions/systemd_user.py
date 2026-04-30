@@ -19,11 +19,15 @@ from auntiepypi._detect._detection import Detection
 # Indirection for tests.
 RUN: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run
 
+_UNIT_REQUIRED = "managed_by=systemd-user but `unit` not set"
+_SYSTEMCTL_NOT_FOUND = "systemctl not found; install systemd-user or use managed_by=command"
+_SYSTEMCTL_TIMEOUT = "systemctl timed out"
+
 
 def start(detection: Detection, declaration: ServerSpec) -> ActionResult:
     """Run `systemctl --user start <unit>`, then re-probe."""
     if not declaration.unit:
-        return ActionResult(ok=False, detail="managed_by=systemd-user but `unit` not set")
+        return ActionResult(ok=False, detail=_UNIT_REQUIRED)
 
     try:
         completed = RUN(
@@ -36,10 +40,10 @@ def start(detection: Detection, declaration: ServerSpec) -> ActionResult:
     except FileNotFoundError:
         return ActionResult(
             ok=False,
-            detail="systemctl not found; install systemd-user or use managed_by=command",
+            detail=_SYSTEMCTL_NOT_FOUND,
         )
     except subprocess.TimeoutExpired:
-        return ActionResult(ok=False, detail="systemctl timed out")
+        return ActionResult(ok=False, detail=_SYSTEMCTL_TIMEOUT)
     except (OSError, subprocess.SubprocessError) as err:
         return ActionResult(ok=False, detail=f"{type(err).__name__}: {err}")
 
@@ -77,10 +81,10 @@ def _run_systemctl(unit: str, verb: str) -> ActionResult | subprocess.CompletedP
     except FileNotFoundError:
         return ActionResult(
             ok=False,
-            detail="systemctl not found; install systemd-user or use managed_by=command",
+            detail=_SYSTEMCTL_NOT_FOUND,
         )
     except subprocess.TimeoutExpired:
-        return ActionResult(ok=False, detail="systemctl timed out")
+        return ActionResult(ok=False, detail=_SYSTEMCTL_TIMEOUT)
     except (OSError, subprocess.SubprocessError) as err:
         return ActionResult(ok=False, detail=f"{type(err).__name__}: {err}")
     return completed
@@ -98,7 +102,7 @@ def _systemctl_failure_detail(completed: subprocess.CompletedProcess[str]) -> st
 def stop(detection: Detection, declaration: ServerSpec) -> ActionResult:
     """Run `systemctl --user stop <unit>`, then re-probe with desired=down."""
     if not declaration.unit:
-        return ActionResult(ok=False, detail="managed_by=systemd-user but `unit` not set")
+        return ActionResult(ok=False, detail=_UNIT_REQUIRED)
 
     completed = _run_systemctl(declaration.unit, "stop")
     if isinstance(completed, ActionResult):
@@ -121,7 +125,7 @@ def stop(detection: Detection, declaration: ServerSpec) -> ActionResult:
 def restart(detection: Detection, declaration: ServerSpec) -> ActionResult:
     """Run `systemctl --user restart <unit>` (atomic), then re-probe with desired=up."""
     if not declaration.unit:
-        return ActionResult(ok=False, detail="managed_by=systemd-user but `unit` not set")
+        return ActionResult(ok=False, detail=_UNIT_REQUIRED)
 
     completed = _run_systemctl(declaration.unit, "restart")
     if isinstance(completed, ActionResult):
