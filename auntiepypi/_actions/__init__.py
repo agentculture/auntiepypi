@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from typing import Callable, Literal
 
+from auntiepypi._actions import auntie as _auntie
 from auntiepypi._actions import command as _command
 from auntiepypi._actions import systemd_user as _systemd_user
 from auntiepypi._actions._action import ActionResult
@@ -36,6 +37,11 @@ ACTIONS: dict[str, StrategyMap] = {
         "start": _command.start,
         "stop": _command.stop,
         "restart": _command.restart,
+    },
+    "auntie": {
+        "start": _auntie.start,
+        "stop": _auntie.stop,
+        "restart": _auntie.restart,
     },
 }
 
