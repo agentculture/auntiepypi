@@ -107,30 +107,39 @@ def _stage_deletions(
     by occurrence so later deletions don't shift earlier indices.
     """
     half_sup_names = [it.detection.name for it in items if it.action_class == "half_supervised"]
+    duplicate_dels = _stage_duplicate_deletions(items, decisions)
+    return half_sup_names, duplicate_dels
 
-    # For each duplicate gap with a decision, compute (name, occurrence_idx)
-    # pairs to delete — everything except the kept index.  Iterate ALL items
-    # (not just "ambiguous") because when a decision is supplied the item may
-    # already be re-classified (e.g. "skip/healthy").  Deduplicate by name.
-    duplicate_dels: list[tuple[str, int]] = []
+
+def _stage_duplicate_deletions(items: list[_Item], decisions: Decisions) -> list[tuple[str, int]]:
+    """Compute ``(name, occurrence_idx)`` pairs to delete for decided duplicates.
+
+    Iterates ALL items (not just "ambiguous") because when a decision is
+    supplied the item may already be re-classified (e.g. "skip/healthy").
+    Deduplicates by name; returns the list sorted descending by occurrence
+    index so later deletions don't shift earlier indices.
+    """
+    out: list[tuple[str, int]] = []
     seen_names: set[str] = set()
     for it in items:
         for gap in it.config_gaps:
-            if gap.kind != "duplicate":
-                continue
-            if gap.name in seen_names:
-                continue  # already processed this duplicate group
-            chosen = decisions.for_key("duplicate", gap.name)
-            if chosen is None:
-                continue
-            keep_idx = int(chosen) - 1  # validated upstream by parse_decisions
-            seen_names.add(gap.name)
-            for occ_idx in gap.occurrences:
-                if occ_idx != keep_idx:
-                    duplicate_dels.append((gap.name, occ_idx))
+            out.extend(_pairs_for_decided_duplicate(gap, decisions, seen_names))
+    out.sort(key=lambda p: -p[1])
+    return out
 
-    duplicate_dels.sort(key=lambda p: -p[1])
-    return half_sup_names, duplicate_dels
+
+def _pairs_for_decided_duplicate(
+    gap: ConfigGap, decisions: Decisions, seen_names: set[str]
+) -> list[tuple[str, int]]:
+    """For a single gap, return the ``(name, occ_idx)`` pairs to delete (or [])."""
+    if gap.kind != "duplicate" or gap.name in seen_names:
+        return []
+    chosen = decisions.for_key("duplicate", gap.name)
+    if chosen is None:
+        return []
+    keep_idx = int(chosen) - 1  # validated upstream by parse_decisions
+    seen_names.add(gap.name)
+    return [(gap.name, occ) for occ in gap.occurrences if occ != keep_idx]
 
 
 def _format_lines(lines_removed: tuple[int, int] | None) -> str:

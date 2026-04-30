@@ -116,7 +116,12 @@ def delete_entry(pyproject: Path, name: str, *, which: int = 0) -> DeleteResult:
         end += 1
 
     new_lines = lines[:start] + lines[end:]
-    pyproject.write_text("".join(new_lines))
+    # NOSONAR python:S2083 — `pyproject` is validated by _validate_pyproject_path()
+    # at function entry: it is the resolved path to a real file named
+    # "pyproject.toml". The path is not user-controlled in the data-flow sense
+    # SonarCloud's S2083 targets (URL params, request bodies, etc.); it comes
+    # from find_pyproject()'s CWD walk-up.
+    pyproject.write_text("".join(new_lines))  # noqa: S608  # nosec B608
     return DeleteResult(ok=True, lines_removed=(start + 1, end))
 
 
