@@ -202,16 +202,8 @@ def _parse_spec(entry: object, idx: int) -> ServerSpec:
     )
 
 
-def _validate_unique_names(specs: tuple[ServerSpec, ...]) -> None:
-    seen: set[str] = set()
-    for s in specs:
-        if s.name in seen:
-            raise ServerConfigError(f"[[tool.auntiepypi.servers]]: duplicate name {s.name!r}")
-        seen.add(s.name)
-
-
 def load_servers(start: Path | None = None) -> ServersConfig:
-    """Read declaration array + scalar settings from the nearest pyproject.toml."""
+    """Strict-mode loader. Raises ``ServerConfigError`` on any violation."""
     found = find_pyproject(start)
     if found is None:
         return ServersConfig()
@@ -220,10 +212,9 @@ def load_servers(start: Path | None = None) -> ServersConfig:
             data = tomllib.load(f)
     except (OSError, tomllib.TOMLDecodeError) as err:
         raise ServerConfigError(f"cannot parse {found}: {err}") from err
+
     tool = data.get("tool", {})
     if not isinstance(tool, dict):
-        # Defensive: a TOML file with a non-table `tool` value is technically
-        # legal at the parser level but unusable; treat it as no-config.
         return ServersConfig()
     auntie_table = tool.get("auntiepypi", {})
     if not isinstance(auntie_table, dict):
@@ -235,9 +226,24 @@ def load_servers(start: Path | None = None) -> ServersConfig:
             f"[[tool.auntiepypi.servers]] must be an array of tables, got "
             f"{type(raw_specs).__name__}"
         )
-    specs = tuple(_parse_spec(entry, idx) for idx, entry in enumerate(raw_specs))
-    _validate_unique_names(specs)
-    return ServersConfig(specs=specs, scan_processes=scan_processes)
+
+    parsed: list[ServerSpec] = [_parse_spec(entry, idx) for idx, entry in enumerate(raw_specs)]
+
+    violations: list[str] = []
+    for spec in parsed:
+        for gap in _spec_gaps(spec):
+            violations.append(f"{gap.name}: {gap.detail}")
+    for gap in _duplicate_gaps(parsed):
+        violations.append(gap.detail)
+
+    if violations:
+        bullets = "\n  - ".join(violations)
+        raise ServerConfigError(
+            f"[[tool.auntiepypi.servers]] cross-field validation failed:\n  - {bullets}\n"
+            f"hint: run `auntie doctor` for guided remediation."
+        )
+
+    return ServersConfig(specs=tuple(parsed), scan_processes=scan_processes)
 
 
 def load_servers_lenient(start: Path | None = None) -> tuple[ServersConfig, list[ConfigGap]]:
