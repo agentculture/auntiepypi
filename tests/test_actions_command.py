@@ -8,7 +8,7 @@ import socket
 import sys
 from pathlib import Path
 
-from auntiepypi._actions.command import apply
+from auntiepypi._actions.command import start
 from auntiepypi._detect._config import ServerSpec
 from auntiepypi._detect._detection import Detection
 
@@ -52,7 +52,7 @@ def test_command_happy_path(tmp_path, monkeypatch):
     spec = _spec("test", port, cmd)
     result = None
     try:
-        result = apply(detection, spec)
+        result = start(detection, spec)
         assert result.ok, f"expected ok=True, got {result}"
         assert result.detail == "started"
         assert result.log_path is not None
@@ -72,7 +72,7 @@ def test_command_not_found(tmp_path, monkeypatch):
     monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path))
     port = _free_port()
     spec = _spec("missing", port, ("definitely_not_a_real_binary_42",))
-    result = apply(_detection(port), spec)
+    result = start(_detection(port), spec)
     assert result.ok is False
     assert "not found" in result.detail
 
@@ -81,7 +81,7 @@ def test_command_exits_immediately(tmp_path, monkeypatch):
     monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path))
     port = _free_port()
     spec = _spec("badexit", port, (sys.executable, "-c", "import sys; sys.exit(1)"))
-    result = apply(_detection(port), spec)
+    result = start(_detection(port), spec)
     assert result.ok is False
     assert "exited immediately" in result.detail
     assert result.log_path is not None  # log was written before child exited
@@ -94,7 +94,7 @@ def test_command_spawns_but_never_binds(tmp_path, monkeypatch):
     spec = _spec("idle", port, (sys.executable, "-c", "import time; time.sleep(30)"))
     result = None
     try:
-        result = apply(_detection(port), spec)
+        result = start(_detection(port), spec)
         assert result.ok is False
         assert "not responding" in result.detail
         assert result.pid is not None  # pid was captured
@@ -112,17 +112,17 @@ def test_command_log_path_uses_xdg(tmp_path, monkeypatch):
     monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path))
     port = _free_port()
     spec = _spec("logtest", port, (sys.executable, "-c", "import sys; sys.exit(0)"))
-    result = apply(_detection(port), spec)
+    result = start(_detection(port), spec)
     assert result.log_path is not None
     assert str(tmp_path) in result.log_path
     assert Path(result.log_path).read_bytes()  # non-empty
 
 
 def test_command_not_configured_returns_error(tmp_path, monkeypatch):
-    """`apply` returns ok=False when declaration.command is None/empty (defensive guard).
+    """`start` returns ok=False when declaration.command is None/empty (defensive guard).
 
     Upstream config validation (`_detect/_config.py`, T9) prevents this in
-    practice, but `apply()` is a public function with its own contract.
+    practice, but `start()` is a public function with its own contract.
     """
     monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path))
     spec = ServerSpec(
@@ -133,7 +133,7 @@ def test_command_not_configured_returns_error(tmp_path, monkeypatch):
         managed_by="command",
         command=None,
     )
-    result = apply(_detection(spec.port), spec)
+    result = start(_detection(spec.port), spec)
     assert result.ok is False
     assert "command" in result.detail and "not set" in result.detail
 
@@ -147,6 +147,6 @@ def test_command_permission_denied(tmp_path, monkeypatch):
     fake_bin.chmod(0o644)  # readable but not executable
     port = _free_port()
     spec = _spec("noperm", port, (str(fake_bin),))
-    result = apply(_detection(port), spec)
+    result = start(_detection(port), spec)
     assert result.ok is False
     assert "permission denied" in result.detail.lower()

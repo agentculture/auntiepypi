@@ -324,8 +324,9 @@ command = ["echo", "hi"]
     )
     captured = {}
 
-    def fake_dispatch(det, spec):
+    def fake_dispatch(action, det, spec):
         captured["called"] = True
+        captured["action"] = action
         return ActionResult(ok=True, detail="started", pid=12345)
 
     monkeypatch.setattr("auntiepypi.cli._commands.doctor._actions.dispatch", fake_dispatch)
@@ -369,7 +370,7 @@ command = ["false"]
     )
     monkeypatch.setattr(
         "auntiepypi.cli._commands.doctor._actions.dispatch",
-        lambda det, spec: ActionResult(ok=False, detail="exited immediately"),
+        lambda action, det, spec: ActionResult(ok=False, detail="exited immediately"),
     )
     with pytest.raises(AfiError) as excinfo:
         cmd_doctor(_make_args(apply=True))
@@ -422,7 +423,7 @@ command = ["echo", "hi"]
     )
     monkeypatch.setattr(
         "auntiepypi.cli._commands.doctor._actions.dispatch",
-        lambda det, spec: ActionResult(ok=True, detail="started"),
+        lambda action, det, spec: ActionResult(ok=True, detail="started"),
     )
     cmd_doctor(_make_args(apply=True))
     bak_files = list(tmp_path.glob("pyproject.toml.*.bak"))
@@ -593,7 +594,7 @@ command = ["echo", "hi"]
     )
     monkeypatch.setattr(
         "auntiepypi.cli._commands.doctor._actions.dispatch",
-        lambda d, s: ActionResult(
+        lambda action, d, s: ActionResult(
             ok=True, detail="started", log_path="/var/log/auntiepypi/x.log", pid=42
         ),
     )
@@ -680,7 +681,7 @@ command = ["echo", "hi"]
     )
     monkeypatch.setattr(
         "auntiepypi.cli._commands.doctor._actions.dispatch",
-        lambda d, s: ActionResult(ok=True, detail="started", pid=42),
+        lambda action, d, s: ActionResult(ok=True, detail="started", pid=42),
     )
     cmd_doctor(_make_args(apply=True, json=True))
     out = capsys.readouterr().out

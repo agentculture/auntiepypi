@@ -206,7 +206,7 @@ def _dispatch_actionable(items: list[_Item]) -> dict[str, ActionResult]:
     for it in items:
         if it.action_class != "actionable" or it.spec is None:
             continue
-        result = _actions.dispatch(it.detection, it.spec)
+        result = _actions.dispatch("start", it.detection, it.spec)
         results[it.detection.name] = result
         if result.ok:
             # Strategy's re-probe confirmed the server is now up. Reflect

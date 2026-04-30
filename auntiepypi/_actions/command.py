@@ -25,7 +25,7 @@ from auntiepypi._detect._detection import Detection
 POPEN = subprocess.Popen
 
 
-def apply(detection: Detection, declaration: ServerSpec) -> ActionResult:
+def start(detection: Detection, declaration: ServerSpec) -> ActionResult:
     """Spawn the command, re-probe, return result. See module docstring."""
     if not declaration.command:
         return ActionResult(ok=False, detail="managed_by=command but `command` not set")
@@ -105,3 +105,15 @@ def _spawn_error(err: OSError, declaration: ServerSpec, log_path: Path) -> Actio
     else:
         detail = f"{type(err).__name__}: {err}"
     return ActionResult(ok=False, detail=detail, log_path=str(log_path))
+
+
+def stop(detection: Detection, declaration: ServerSpec) -> ActionResult:
+    """Stop a `managed_by=command` server. Implementation lands in task 6."""
+    _ = (detection, declaration)
+    return ActionResult(ok=False, detail="command.stop not yet implemented")
+
+
+def restart(detection: Detection, declaration: ServerSpec) -> ActionResult:
+    """Restart a `managed_by=command` server. Implementation lands in task 7."""
+    _ = (detection, declaration)
+    return ActionResult(ok=False, detail="command.restart not yet implemented")

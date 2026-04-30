@@ -20,7 +20,7 @@ from auntiepypi._detect._detection import Detection
 RUN: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run
 
 
-def apply(detection: Detection, declaration: ServerSpec) -> ActionResult:
+def start(detection: Detection, declaration: ServerSpec) -> ActionResult:
     """Run `systemctl --user start <unit>`, then re-probe."""
     if not declaration.unit:
         return ActionResult(ok=False, detail="managed_by=systemd-user but `unit` not set")
@@ -62,3 +62,15 @@ def apply(detection: Detection, declaration: ServerSpec) -> ActionResult:
             f"(check unit logs: journalctl --user -u {declaration.unit})"
         ),
     )
+
+
+def stop(detection: Detection, declaration: ServerSpec) -> ActionResult:
+    """Stop a `managed_by=systemd-user` server. Implementation lands in task 8."""
+    _ = (detection, declaration)
+    return ActionResult(ok=False, detail="systemd_user.stop not yet implemented")
+
+
+def restart(detection: Detection, declaration: ServerSpec) -> ActionResult:
+    """Restart a `managed_by=systemd-user` server. Implementation lands in task 9."""
+    _ = (detection, declaration)
+    return ActionResult(ok=False, detail="systemd_user.restart not yet implemented")
