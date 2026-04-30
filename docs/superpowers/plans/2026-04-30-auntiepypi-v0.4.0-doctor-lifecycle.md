@@ -93,6 +93,7 @@ Expected: tests collect without import errors; current count ~v0.3.0 baseline.
 ## Task 1: `ActionResult` dataclass
 
 **Files:**
+
 - Create: `auntiepypi/_actions/__init__.py` (empty for now — will fill in Task 6)
 - Create: `auntiepypi/_actions/_action.py`
 - Create: `tests/test_actions_action.py`
@@ -203,6 +204,7 @@ git commit -m "feat(_actions): ActionResult dataclass — uniform strategy retur
 ## Task 2: XDG state dir + `slugify` (`_actions/_logs.py`)
 
 **Files:**
+
 - Create: `auntiepypi/_actions/_logs.py`
 - Create: `tests/test_actions_logs.py`
 
@@ -328,6 +330,7 @@ git commit -m "feat(_actions): XDG state-dir resolver + slugify for command-stra
 ## Task 3: Re-probe loop (`_actions/_reprobe.py`)
 
 **Files:**
+
 - Create: `auntiepypi/_actions/_reprobe.py`
 - Create: `tests/test_actions_reprobe.py`
 
@@ -514,6 +517,7 @@ git commit -m "feat(_actions): post-spawn re-probe loop (5s budget, exponential 
 ## Task 4: `command` strategy (`_actions/command.py`)
 
 **Files:**
+
 - Create: `auntiepypi/_actions/command.py`
 - Create: `tests/test_actions_command.py`
 - Create: `tests/fixtures/__init__.py` (empty if missing)
@@ -814,6 +818,7 @@ git commit -m "feat(_actions): command strategy — detached Popen + sync re-pro
 ## Task 5: `systemd-user` strategy (`_actions/systemd_user.py`)
 
 **Files:**
+
 - Create: `auntiepypi/_actions/systemd_user.py`
 - Create: `tests/test_actions_systemd_user.py`
 
@@ -1023,6 +1028,7 @@ git commit -m "feat(_actions): systemd-user strategy — systemctl + post-spawn 
 ## Task 6: `ACTIONS` registry + `dispatch()` (`_actions/__init__.py`)
 
 **Files:**
+
 - Modify: `auntiepypi/_actions/__init__.py`
 - Create: `tests/test_actions_dispatch.py`
 
@@ -1192,6 +1198,7 @@ git commit -m "feat(_actions): dispatch() registry — route by managed_by; neve
 ## Task 7: Config-edit (`_actions/_config_edit.py`)
 
 **Files:**
+
 - Create: `auntiepypi/_actions/_config_edit.py`
 - Create: `tests/test_actions_config_edit.py`
 
@@ -1500,6 +1507,7 @@ git commit -m "feat(_actions): delete-whole-entry + numbered .bak snapshot (stdl
 ## Task 8: `ConfigGap` dataclass + lenient load (`_detect/_config.py`)
 
 **Files:**
+
 - Modify: `auntiepypi/_detect/_config.py`
 - Create: `tests/test_detect_config_lenient.py`
 
@@ -1759,6 +1767,7 @@ git commit -m "feat(_detect): ConfigGap + load_servers_lenient — for doctor's 
 ## Task 9: Strict cross-field validation in `_detect/_config.py`
 
 **Files:**
+
 - Modify: `auntiepypi/_detect/_config.py`
 - Create: `tests/test_detect_config_strict.py`
 
@@ -1999,6 +2008,7 @@ git commit -m "feat(_detect): strict cross-field validation; reports all violati
 ## Task 10: Decision registry (`cli/_commands/_decide.py`)
 
 **Files:**
+
 - Create: `auntiepypi/cli/_commands/_decide.py`
 - Create: `tests/test_cli_decide.py`
 
@@ -2166,6 +2176,7 @@ git commit -m "feat(cli): --decide registry — extensible ambiguity-resolution 
 ## Task 11: Doctor rewrite — Part 1: detection wiring + diagnosis
 
 **Files:**
+
 - Modify: `auntiepypi/cli/_commands/doctor.py` (full rewrite)
 - Modify: `tests/test_doctor.py` → rename to `tests/test_cli_doctor.py` and rewrite
 
@@ -2662,6 +2673,7 @@ git commit -m "refactor(doctor): consume _detect/, classify into action classes,
 ## Task 12: Doctor — Part 2: `--apply` path
 
 **Files:**
+
 - Modify: `auntiepypi/cli/_commands/doctor.py` (add apply logic)
 - Modify: `tests/test_cli_doctor.py` (add apply tests)
 
@@ -3015,6 +3027,7 @@ git commit -m "feat(doctor): --apply path — dispatch actionable, delete half-s
 ## Task 13: Doctor — Part 3: `--decide` for duplicates
 
 **Files:**
+
 - Modify: `auntiepypi/cli/_commands/doctor.py` (refine duplicate handling)
 - Modify: `tests/test_cli_doctor.py` (add decide tests)
 
@@ -3137,6 +3150,7 @@ git commit -m "feat(doctor): --decide=duplicate:NAME=N resolves ambiguous duplic
 ## Task 14: Doctor — Part 4: JSON envelope
 
 **Files:**
+
 - Modify: `tests/test_cli_doctor.py` (add JSON tests)
 - Modify: `auntiepypi/cli/_commands/doctor.py` (only if existing JSON output doesn't match — most fields are already there from T11/T12)
 
@@ -3256,6 +3270,7 @@ git commit -m "test(doctor): JSON envelope shape — fix_attempted/fix_ok/log_pa
 ## Task 15: Overview strict-mode behavior + delete `_probes/` and `packages` noun
 
 **Files:**
+
 - Verify: `auntiepypi/cli/_commands/overview.py` already converts `ServerConfigError` → `AfiError(code=1)` (likely already does in v0.3.0; just verify with a test)
 - Create: `tests/test_cli_overview_strict.py`
 - Delete: `auntiepypi/_probes/` (directory)
@@ -3353,6 +3368,7 @@ git commit -m "refactor: drop _probes/ and packages noun (now redundant with _de
 ## Task 16: Catalog + learn updates
 
 **Files:**
+
 - Modify: `auntiepypi/explain/catalog.py`
 - Modify: `auntiepypi/cli/_commands/learn.py`
 - Modify: `tests/test_cli.py` (or wherever learn output is verified)
@@ -3381,6 +3397,7 @@ grep -n "packages\|doctor\|fix" auntiepypi/explain/catalog.py auntiepypi/cli/_co
 
 If `tests/test_cli.py` (or the equivalent) verifies `learn --json`'s
 `planned[]` or specific verb mentions, update assertions to:
+
 - `planned == []`
 - `verbs` includes `doctor` with `--apply` not `--fix`
 - no `packages` mention anywhere
@@ -3405,6 +3422,7 @@ git commit -m "docs(catalog,learn): refresh for v0.4.0 — --apply, --decide, no
 ## Task 17: Repo docs + .gitignore + version bump
 
 **Files:**
+
 - Modify: `CLAUDE.md`
 - Modify: `README.md`
 - Modify: `docs/about.md`

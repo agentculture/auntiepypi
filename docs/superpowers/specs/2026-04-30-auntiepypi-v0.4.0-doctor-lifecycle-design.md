@@ -670,7 +670,7 @@ live-suite obligations. `flake8`, `pylint --errors-only`,
 ## Catalog, learn, docs (mechanical)
 
 - `auntiepypi/explain/catalog.py` — update `("doctor",)` for new flags
-  + behavior; remove `("packages",)` and `("packages", "overview")`;
+  and behavior; remove `("packages",)` and `("packages", "overview")`;
   update `("overview",)` to drop the noun-form mention.
 - `auntiepypi/cli/_commands/learn.py` — update `_M_DOCTOR`; remove
   `_M_PACKAGES` if present; refresh examples; `planned[]` stays `[]`.

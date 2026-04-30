@@ -15,7 +15,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - auntie doctor --decide=duplicate:NAME=N: resolves duplicate-name ambiguity before acting
 - auntie doctor [TARGET] drill-down: diagnose a single server by name
 - Cross-field config validation in strict + lenient modes (managed_by/unit/command consistency)
-- Numbered pyproject.toml.<N>.bak snapshots written before any mutation
+- Numbered `pyproject.toml.<N>.bak` snapshots written before any mutation
 - auntiepypi/_errors.py extracted to break circular import
 
 ### Changed

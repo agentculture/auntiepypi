@@ -91,7 +91,9 @@ def test_overview_package_drilldown_against_real_api(monkeypatch, tmp_path, caps
     assert rc == 0
 
     payload = json.loads(capsys.readouterr().out)
+    # Deep-dive shape: {"subject": pkg, "sections": [<one per Dimension>, _summary]}
+    assert payload["subject"] == "requests"
     sections = payload["sections"]
-    pkg_sections = [s for s in sections if s.get("title") == "requests"]
-    assert len(pkg_sections) == 1
-    assert pkg_sections[0]["light"] in {"green", "yellow", "red", "unknown"}
+    summary = [s for s in sections if s.get("title") == "_summary"]
+    assert len(summary) == 1
+    assert summary[0]["light"] in {"green", "yellow", "red", "unknown"}
