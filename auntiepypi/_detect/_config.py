@@ -22,11 +22,13 @@ Hard cases (raise :class:`ServerConfigError`):
 
 from __future__ import annotations
 
+import ipaddress
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
 from auntiepypi._packages_config import find_pyproject
+from auntiepypi._server._config import LocalConfig, default_root
 
 _VALID_FLAVORS = frozenset({"pypiserver", "devpi", "unknown"})
 _VALID_MANAGED_BY = frozenset({"systemd-user", "docker", "compose", "command", "manual"})
@@ -249,6 +251,89 @@ def load_servers(start: Path | None = None) -> ServersConfig:
         )
 
     return ServersConfig(specs=tuple(parsed), scan_processes=scan_processes)
+
+
+def _is_loopback(host: str) -> bool:
+    """True for ``localhost`` (alias) or any literal loopback IP."""
+    if host.lower() == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
+
+
+def _validate_local_host(host: object) -> str:
+    if not isinstance(host, str) or not host:
+        raise ServerConfigError(
+            "[tool.auntiepypi.local] 'host' must be a non-empty string"
+        )
+    if not _is_loopback(host):
+        raise ServerConfigError(
+            f"[tool.auntiepypi.local] 'host'={host!r}: v0.6.0 binds loopback "
+            "only (auth + TLS land in v0.7.0). Use 127.0.0.1, localhost, or ::1."
+        )
+    return host
+
+
+def _validate_local_port(port: object) -> int:
+    if not isinstance(port, int) or isinstance(port, bool) or not 1 <= port <= 65535:
+        raise ServerConfigError(
+            f"[tool.auntiepypi.local] 'port' out of range "
+            f"(got {port!r}; expected int 1..65535)"
+        )
+    return port
+
+
+def _validate_local_root(root: object) -> Path:
+    if not isinstance(root, str) or not root:
+        raise ServerConfigError(
+            "[tool.auntiepypi.local] 'root' must be a non-empty string"
+        )
+    return Path(root).expanduser()
+
+
+def load_local_config(start: Path | None = None) -> LocalConfig:
+    """Read ``[tool.auntiepypi.local]`` from the nearest ``pyproject.toml``.
+
+    Returns a :class:`LocalConfig` always — defaults fill in any field
+    the table omits, and a missing table yields a fully-defaulted
+    config. Validates loopback host, port range, and tilde expansion.
+    Raises :class:`ServerConfigError` on structural problems.
+    """
+    found = find_pyproject(start)
+    if found is None:
+        return LocalConfig()
+    try:
+        with found.open("rb") as f:
+            data = tomllib.load(f)
+    except (OSError, tomllib.TOMLDecodeError) as err:
+        raise ServerConfigError(f"cannot parse {found}: {err}") from err
+
+    tool = data.get("tool", {})
+    if not isinstance(tool, dict):
+        return LocalConfig()
+    auntie_table = tool.get("auntiepypi", {})
+    if not isinstance(auntie_table, dict):
+        return LocalConfig()
+    local_table = auntie_table.get("local", {})
+    if not isinstance(local_table, dict):
+        raise ServerConfigError(
+            f"[tool.auntiepypi.local] must be a table, got {type(local_table).__name__}"
+        )
+    if not local_table:
+        return LocalConfig()
+
+    kwargs: dict = {}
+    if "host" in local_table:
+        kwargs["host"] = _validate_local_host(local_table["host"])
+    if "port" in local_table:
+        kwargs["port"] = _validate_local_port(local_table["port"])
+    if "root" in local_table:
+        kwargs["root"] = _validate_local_root(local_table["root"])
+    else:
+        kwargs["root"] = default_root()
+    return LocalConfig(**kwargs)
 
 
 def load_servers_lenient(start: Path | None = None) -> tuple[ServersConfig, list[ConfigGap]]:
