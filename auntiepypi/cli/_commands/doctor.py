@@ -119,11 +119,11 @@ def _apply(items: list[_Item], decisions: Decisions) -> dict[str, ActionResult]:
             except ValueError:
                 continue
             seen_names.add(gap.name)
-            for original_idx in gap.lines:
-                if original_idx != keep_idx:
-                    duplicate_deletions.append((gap.name, original_idx))
+            for occ_idx in gap.occurrences:
+                if occ_idx != keep_idx:
+                    duplicate_deletions.append((gap.name, occ_idx))
 
-    # Descending by original_idx so each deletion leaves earlier indices intact.
+    # Descending by occ_idx so each deletion leaves earlier occurrences intact.
     duplicate_deletions.sort(key=lambda p: -p[1])
 
     pyproject = find_pyproject()
@@ -168,14 +168,24 @@ def _apply(items: list[_Item], decisions: Decisions) -> dict[str, ActionResult]:
 
 
 def _build_items(detections, specs, gaps, decisions: Decisions) -> list[_Item]:
-    by_name: dict[str, ServerSpec] = {s.name: s for s in specs}
+    by_name: dict[str, list[ServerSpec]] = {}
+    for spec in specs:
+        by_name.setdefault(spec.name, []).append(spec)
+
     gaps_by_name: dict[str, list[ConfigGap]] = {}
     for g in gaps:
         gaps_by_name.setdefault(g.name, []).append(g)
 
+    # Track per-name consumption so duplicates pair with detections in order.
+    consumed: dict[str, int] = {}
+
     items: list[_Item] = []
     for det in detections:
-        spec = by_name.get(det.name)
+        idx = consumed.get(det.name, 0)
+        spec_list = by_name.get(det.name, [])
+        spec = spec_list[idx] if idx < len(spec_list) else None
+        if spec is not None:
+            consumed[det.name] = idx + 1
         item_gaps = gaps_by_name.get(det.name, []) if spec else []
         action_class, diagnosis, remediation = _classify(det, spec, item_gaps, decisions)
         items.append(

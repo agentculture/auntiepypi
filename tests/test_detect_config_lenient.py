@@ -100,7 +100,7 @@ managed_by = "manual"
     dup_gaps = [g for g in gaps if g.kind == "duplicate"]
     assert len(dup_gaps) == 1
     assert dup_gaps[0].name == "main"
-    assert len(dup_gaps[0].lines) == 2
+    assert dup_gaps[0].occurrences == (0, 1)
 
 
 def test_lenient_manual_no_companions_required(tmp_path):

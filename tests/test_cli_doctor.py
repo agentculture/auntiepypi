@@ -540,6 +540,77 @@ managed_by = "manual"
     assert "8080" in text
 
 
+def test_doctor_apply_three_way_duplicate_with_decide_keep_middle(tmp_path, monkeypatch):
+    """3-way duplicate, --decide=duplicate:main=2 keeps the middle entry."""
+    from auntiepypi._detect._detection import Detection
+
+    monkeypatch.chdir(tmp_path)
+    p = _write_pyproject(
+        tmp_path,
+        """\
+[[tool.auntiepypi.servers]]
+name = "main"
+flavor = "pypiserver"
+port = 8080
+managed_by = "manual"
+
+[[tool.auntiepypi.servers]]
+name = "main"
+flavor = "devpi"
+port = 3141
+managed_by = "manual"
+
+[[tool.auntiepypi.servers]]
+name = "main"
+flavor = "pypiserver"
+port = 9999
+managed_by = "manual"
+""",
+    )
+    monkeypatch.setattr(
+        "auntiepypi.cli._commands.doctor.detect_all",
+        lambda *a, **kw: [
+            Detection(
+                name="main",
+                flavor="pypiserver",
+                host="127.0.0.1",
+                port=8080,
+                url="http://127.0.0.1:8080/",
+                status="up",
+                source="declared",
+                managed_by="manual",
+            ),
+            Detection(
+                name="main",
+                flavor="devpi",
+                host="127.0.0.1",
+                port=3141,
+                url="http://127.0.0.1:3141/+api",
+                status="up",
+                source="declared",
+                managed_by="manual",
+            ),
+            Detection(
+                name="main",
+                flavor="pypiserver",
+                host="127.0.0.1",
+                port=9999,
+                url="http://127.0.0.1:9999/",
+                status="up",
+                source="declared",
+                managed_by="manual",
+            ),
+        ],
+    )
+    rc = cmd_doctor(_make_args(apply=True, decide=["duplicate:main=2"]))
+    assert rc == EXIT_SUCCESS
+    text = p.read_text()
+    # =2 keeps middle (devpi/3141); first (8080) and third (9999) deleted.
+    assert "3141" in text
+    assert "8080" not in text
+    assert "9999" not in text
+
+
 def test_doctor_apply_unknown_decide_key_exits_1(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     _no_servers_anywhere(monkeypatch)

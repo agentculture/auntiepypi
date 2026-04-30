@@ -74,7 +74,12 @@ class ConfigGap:
     kind: str  # "missing-companion" | "duplicate"
     name: str  # entry name
     detail: str  # human-readable detail
-    lines: tuple[int, ...] = ()  # array indices for "duplicate"; () otherwise
+    occurrences: tuple[int, ...] = ()
+    """0-indexed occurrence positions within this duplicate group (e.g.
+    ``(0, 1, 2)`` for a 3-way duplicate). Empty for kinds other than
+    "duplicate". NOT array indices in the original
+    ``[[tool.auntiepypi.servers]]`` list — those would diverge from
+    `delete_entry`'s `which` parameter when duplicates are non-adjacent."""
 
 
 def _spec_gaps(spec: ServerSpec) -> list[ConfigGap]:
@@ -109,7 +114,7 @@ def _duplicate_gaps(parsed: list[ServerSpec]) -> list[ConfigGap]:
                     kind="duplicate",
                     name=name,
                     detail=f"duplicate name {name!r} appears {len(indices)} times",
-                    lines=tuple(indices),
+                    occurrences=tuple(range(len(indices))),
                 )
             )
     return gaps
