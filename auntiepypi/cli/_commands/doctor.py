@@ -16,6 +16,7 @@ from dataclasses import dataclass
 
 from auntiepypi import _actions
 from auntiepypi._actions._action import ActionResult
+from auntiepypi._actions._config_edit import delete_entry, snapshot
 from auntiepypi._detect import detect_all
 from auntiepypi._detect._config import (
     ConfigGap,
@@ -23,13 +24,10 @@ from auntiepypi._detect._config import (
     load_servers_lenient,
 )
 from auntiepypi._detect._detection import Detection
+from auntiepypi._packages_config import find_pyproject
 from auntiepypi.cli._commands._decide import Decisions, parse_decisions
 from auntiepypi.cli._errors import EXIT_ENV_ERROR, EXIT_SUCCESS, AfiError
 from auntiepypi.cli._output import emit_diagnostic, emit_result
-
-# NOTE: _config_edit and _packages_config are imported lazily inside _apply()
-# to avoid a circular import:
-#   _config_edit → auntiepypi.cli._errors → auntiepypi.cli → doctor → _config_edit
 
 _SUBJECT = "auntie doctor"
 
@@ -98,11 +96,6 @@ def _apply(items: list[_Item], decisions: Decisions) -> dict[str, ActionResult]:
     Order: stage all pending config-mutations → snapshot once → execute deletions
     → dispatch actionable entries.
     """
-    # Lazy imports break the circular dependency:
-    # _config_edit → auntiepypi.cli._errors → auntiepypi.cli → doctor → _config_edit
-    from auntiepypi._actions._config_edit import delete_entry, snapshot
-    from auntiepypi._packages_config import find_pyproject
-
     half_sup = [it for it in items if it.action_class == "half_supervised"]
     decided_duplicates: list[_Item] = []
     for it in items:
