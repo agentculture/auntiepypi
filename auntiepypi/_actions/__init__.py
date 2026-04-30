@@ -1,31 +1,42 @@
-"""Lifecycle strategies, keyed on `managed_by`.
+"""Lifecycle strategies, keyed on `managed_by` and lifecycle action.
 
-Each strategy module under this package exposes an ``apply(detection,
-declaration) -> ActionResult`` function. ``dispatch()`` is the only
-caller-facing entry point; it never raises — unimplemented or "manual"
-modes return a uniform ``ActionResult`` so doctor's loop can handle
-every case the same way.
+Each strategy module under this package exposes three functions —
+``start(detection, declaration)``, ``stop(detection, declaration)``,
+``restart(detection, declaration)`` — each returning ``ActionResult``.
+``dispatch(action, ...)`` is the only caller-facing entry point; it
+never raises — unimplemented or "manual" modes return a uniform
+``ActionResult`` so callers can handle every case the same way.
 
 Adding a strategy: drop a new file under ``_actions/<managed_by>.py``
-exposing ``apply``, then add it to ``ACTIONS`` below. No other surgery
-needed.
+exposing ``start``, ``stop``, ``restart``, then add it to ``ACTIONS``
+below. No other surgery needed.
 """
 
 from __future__ import annotations
 
-from typing import Callable
+from typing import Callable, Literal
 
+from auntiepypi._actions import command as _command
+from auntiepypi._actions import systemd_user as _systemd_user
 from auntiepypi._actions._action import ActionResult
-from auntiepypi._actions.command import apply as _command_apply
-from auntiepypi._actions.systemd_user import apply as _systemd_user_apply
 from auntiepypi._detect._config import ServerSpec
 from auntiepypi._detect._detection import Detection
 
+Action = Literal["start", "stop", "restart"]
 Strategy = Callable[[Detection, ServerSpec], ActionResult]
+StrategyMap = dict[str, Strategy]
 
-ACTIONS: dict[str, Strategy] = {
-    "systemd-user": _systemd_user_apply,
-    "command": _command_apply,
+ACTIONS: dict[str, StrategyMap] = {
+    "systemd-user": {
+        "start": _systemd_user.start,
+        "stop": _systemd_user.stop,
+        "restart": _systemd_user.restart,
+    },
+    "command": {
+        "start": _command.start,
+        "stop": _command.stop,
+        "restart": _command.restart,
+    },
 }
 
 # Modes that are validated as legal but are intentionally "no strategy".
@@ -34,18 +45,26 @@ _NOT_IMPLEMENTED: frozenset[str] = frozenset({"docker", "compose"})
 __all__ = ["ACTIONS", "ActionResult", "dispatch"]
 
 
-def dispatch(detection: Detection, declaration: ServerSpec) -> ActionResult:
-    """Route to the strategy for ``declaration.managed_by``.
+def dispatch(action: Action, detection: Detection, declaration: ServerSpec) -> ActionResult:
+    """Route to the strategy/action for ``declaration.managed_by``.
 
     Never raises. Unknown / unsupervised modes return a uniform result.
+    Unknown action keys (or strategy maps missing an action) likewise
+    return ActionResult(ok=False, ...) instead of KeyError.
     """
     mode = declaration.managed_by
     if mode in ACTIONS:
-        return ACTIONS[mode](detection, declaration)
+        strategies = ACTIONS[mode]
+        if action not in strategies:
+            return ActionResult(
+                ok=False,
+                detail=f"action={action!r} not supported for managed_by={mode!r}",
+            )
+        return strategies[action](detection, declaration)
     if mode in _NOT_IMPLEMENTED:
         return ActionResult(
             ok=False,
-            detail=f"managed_by={mode!r} not implemented in v0.4.0",
+            detail=f"managed_by={mode!r} not implemented",
         )
     # mode is None ("manual" by spec) or "manual"
     return ActionResult(

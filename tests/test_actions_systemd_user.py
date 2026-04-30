@@ -66,7 +66,7 @@ def test_systemd_user_happy_path(monkeypatch):
         systemd_user, "probe", lambda *a, **kw: type("R", (), {"status": "up", "detail": None})()
     )
 
-    result = systemd_user.apply(_det(), _spec())
+    result = systemd_user.start(_det(), _spec())
     assert result.ok is True
     assert result.detail == "started"
     assert runner.last_call[0][0] == ["systemctl", "--user", "start", "x.service"]
@@ -79,7 +79,7 @@ def test_systemd_user_systemctl_nonzero(monkeypatch):
         systemd_user, "probe", lambda *a, **kw: type("R", (), {"status": "down", "detail": None})()
     )
 
-    result = systemd_user.apply(_det(), _spec())
+    result = systemd_user.start(_det(), _spec())
     assert result.ok is False
     assert "exit 5" in result.detail
     assert "Failed to start" in result.detail
@@ -92,7 +92,7 @@ def test_systemd_user_systemctl_ok_but_reprobe_fails(monkeypatch):
         systemd_user, "probe", lambda *a, **kw: type("R", (), {"status": "down", "detail": None})()
     )
 
-    result = systemd_user.apply(_det(), _spec())
+    result = systemd_user.start(_det(), _spec())
     assert result.ok is False
     assert "systemctl ok but server not responding" in result.detail
 
@@ -101,7 +101,7 @@ def test_systemd_user_not_on_path(monkeypatch):
     runner = _FakeRunner(raise_=FileNotFoundError("systemctl"))
     monkeypatch.setattr(systemd_user, "RUN", runner)
 
-    result = systemd_user.apply(_det(), _spec())
+    result = systemd_user.start(_det(), _spec())
     assert result.ok is False
     assert "systemctl not found" in result.detail
 
@@ -110,13 +110,13 @@ def test_systemd_user_timeout(monkeypatch):
     runner = _FakeRunner(raise_=subprocess.TimeoutExpired(cmd="systemctl", timeout=15))
     monkeypatch.setattr(systemd_user, "RUN", runner)
 
-    result = systemd_user.apply(_det(), _spec())
+    result = systemd_user.start(_det(), _spec())
     assert result.ok is False
     assert "timed out" in result.detail
 
 
 def test_systemd_user_missing_unit(monkeypatch):
-    result = systemd_user.apply(_det(), _spec(unit=None))
+    result = systemd_user.start(_det(), _spec(unit=None))
     assert result.ok is False
     assert "unit" in result.detail
 
@@ -126,7 +126,7 @@ def test_systemd_user_oserror_catch_all(monkeypatch):
     runner = _FakeRunner(raise_=PermissionError("systemctl"))
     monkeypatch.setattr(systemd_user, "RUN", runner)
 
-    result = systemd_user.apply(_det(), _spec())
+    result = systemd_user.start(_det(), _spec())
     assert result.ok is False
     assert "PermissionError" in result.detail
 
@@ -136,7 +136,7 @@ def test_systemd_user_nonzero_with_empty_stderr(monkeypatch):
     runner = _FakeRunner(returncode=3, stderr="", stdout="")
     monkeypatch.setattr(systemd_user, "RUN", runner)
 
-    result = systemd_user.apply(_det(), _spec())
+    result = systemd_user.start(_det(), _spec())
     assert result.ok is False
     assert result.detail == "systemctl exit 3"  # no trailing colon, no trailing space
     assert not result.detail.endswith(":")

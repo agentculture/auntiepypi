@@ -3,14 +3,17 @@
 > auntie (Python distribution: `auntiepypi`) is both a CLI and an agent
 > that maintains, uses, and serves the CLI for managing PyPI packages.
 > It overviews packages on pypi.org, detects PyPI-flavored servers
-> running locally, and can start declared servers — informational
-> first, actionable with `--apply`. Stop/restart lands in v0.5.0.
+> running locally, and starts/stops/restarts declared servers —
+> informational first, actionable on demand.
 
-**Status:** v0.4.0 — doctor lifecycle landed. `auntie doctor` is now a
-managed_by-aware lifecycle dispatcher: `--apply` replaces `--fix`,
-`_actions/` provides `systemd-user` and `command` strategies,
-numbered `.bak` snapshots guard every `pyproject.toml` mutation. The
-`packages` noun is removed — use `auntie overview <PKG>` instead.
+**Status:** v0.5.0 — lifecycle verbs landed. `auntie up`,
+`auntie down`, and `auntie restart` are first-class verbs against
+declared servers (`managed_by ∈ {systemd-user, command}`). The
+`_actions/` strategy contract has widened from a single `apply()` to
+sibling `start` / `stop` / `restart` per strategy. `command`-managed
+servers are now PID-tracked (`$XDG_STATE_HOME/auntiepypi/<slug>.pid`)
+with a Linux port-walk fallback. The bare invocation (`auntie up`
+with no target) is reserved for v0.6.0's first-party PyPI server.
 
 ## Quick start
 
@@ -21,6 +24,9 @@ auntie overview --json | jq '.sections[] | select(.category == "servers")'
 auntie overview requests            # deep-dive into a PyPI package
 auntie doctor                       # diagnose declared servers (dry-run)
 auntie doctor --apply               # act on actionable remediations
+auntie up <name>                    # start one declared server
+auntie down --all                   # stop every supervised server
+auntie restart <name>               # atomic for systemd-user; stop+start for command
 ```
 
 Example servers-section output (one declared server):

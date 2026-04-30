@@ -19,11 +19,15 @@ from auntiepypi._detect._detection import Detection
 # Indirection for tests.
 RUN: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run
 
+_UNIT_REQUIRED = "managed_by=systemd-user but `unit` not set"
+_SYSTEMCTL_NOT_FOUND = "systemctl not found; install systemd-user or use managed_by=command"
+_SYSTEMCTL_TIMEOUT = "systemctl timed out"
 
-def apply(detection: Detection, declaration: ServerSpec) -> ActionResult:
+
+def start(detection: Detection, declaration: ServerSpec) -> ActionResult:
     """Run `systemctl --user start <unit>`, then re-probe."""
     if not declaration.unit:
-        return ActionResult(ok=False, detail="managed_by=systemd-user but `unit` not set")
+        return ActionResult(ok=False, detail=_UNIT_REQUIRED)
 
     try:
         completed = RUN(
@@ -36,10 +40,10 @@ def apply(detection: Detection, declaration: ServerSpec) -> ActionResult:
     except FileNotFoundError:
         return ActionResult(
             ok=False,
-            detail="systemctl not found; install systemd-user or use managed_by=command",
+            detail=_SYSTEMCTL_NOT_FOUND,
         )
     except subprocess.TimeoutExpired:
-        return ActionResult(ok=False, detail="systemctl timed out")
+        return ActionResult(ok=False, detail=_SYSTEMCTL_TIMEOUT)
     except (OSError, subprocess.SubprocessError) as err:
         return ActionResult(ok=False, detail=f"{type(err).__name__}: {err}")
 
@@ -59,6 +63,83 @@ def apply(detection: Detection, declaration: ServerSpec) -> ActionResult:
         ok=False,
         detail=(
             "systemctl ok but server not responding "
+            f"(check unit logs: journalctl --user -u {declaration.unit})"
+        ),
+    )
+
+
+def _run_systemctl(unit: str, verb: str) -> ActionResult | subprocess.CompletedProcess[str]:
+    """Wrap `systemctl --user <verb> <unit>`; map exec-time errors to ActionResult."""
+    try:
+        completed = RUN(
+            ["systemctl", "--user", verb, unit],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+    except FileNotFoundError:
+        return ActionResult(
+            ok=False,
+            detail=_SYSTEMCTL_NOT_FOUND,
+        )
+    except subprocess.TimeoutExpired:
+        return ActionResult(ok=False, detail=_SYSTEMCTL_TIMEOUT)
+    except (OSError, subprocess.SubprocessError) as err:
+        return ActionResult(ok=False, detail=f"{type(err).__name__}: {err}")
+    return completed
+
+
+def _systemctl_failure_detail(completed: subprocess.CompletedProcess[str]) -> str:
+    """Format a non-zero systemctl exit into a one-line detail."""
+    first_line = (completed.stderr or completed.stdout or "").strip().splitlines()
+    snippet = first_line[0] if first_line else ""
+    if snippet:
+        return f"systemctl exit {completed.returncode}: {snippet}"
+    return f"systemctl exit {completed.returncode}"
+
+
+def stop(detection: Detection, declaration: ServerSpec) -> ActionResult:
+    """Run `systemctl --user stop <unit>`, then re-probe with desired=down."""
+    if not declaration.unit:
+        return ActionResult(ok=False, detail=_UNIT_REQUIRED)
+
+    completed = _run_systemctl(declaration.unit, "stop")
+    if isinstance(completed, ActionResult):
+        return completed
+    if completed.returncode != 0:
+        return ActionResult(ok=False, detail=_systemctl_failure_detail(completed))
+
+    result = probe(detection, desired="down")
+    if result.status in ("down", "absent"):
+        return ActionResult(ok=True, detail="stopped")
+    return ActionResult(
+        ok=False,
+        detail=(
+            "systemctl ok but server still responding "
+            f"(check unit logs: journalctl --user -u {declaration.unit})"
+        ),
+    )
+
+
+def restart(detection: Detection, declaration: ServerSpec) -> ActionResult:
+    """Run `systemctl --user restart <unit>` (atomic), then re-probe with desired=up."""
+    if not declaration.unit:
+        return ActionResult(ok=False, detail=_UNIT_REQUIRED)
+
+    completed = _run_systemctl(declaration.unit, "restart")
+    if isinstance(completed, ActionResult):
+        return completed
+    if completed.returncode != 0:
+        return ActionResult(ok=False, detail=_systemctl_failure_detail(completed))
+
+    result = probe(detection)
+    if result.status == "up":
+        return ActionResult(ok=True, detail="restarted")
+    return ActionResult(
+        ok=False,
+        detail=(
+            "systemctl ok but server not responding after restart "
             f"(check unit logs: journalctl --user -u {declaration.unit})"
         ),
     )
