@@ -15,7 +15,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from auntiepypi.cli._errors import EXIT_USER_ERROR, AfiError
+from auntiepypi._errors import EXIT_USER_ERROR, AfiError
 
 _SERVERS_HEADER = "[[tool.auntiepypi.servers]]"
 _INLINE_TABLE_RE = re.compile(r"\[\[tool\.auntiepypi\.servers\]\]\s*\{")
@@ -40,11 +40,15 @@ class DeleteResult:
     lines_removed: tuple[int, int] | None = None
 
 
-def delete_entry(pyproject: Path, name: str) -> DeleteResult:
-    """Remove the whole [[tool.auntiepypi.servers]] block whose entry has the given `name`.
+def delete_entry(pyproject: Path, name: str, *, which: int = 0) -> DeleteResult:
+    """Remove the [[tool.auntiepypi.servers]] block whose entry has the given `name`.
+
+    :param which: 0-indexed occurrence to delete when multiple blocks share the
+        same `name` (used by ``--decide=duplicate:NAME=N`` resolution). Default
+        0 = delete the first matching block.
 
     Refuses to delete inline-table forms or blocks containing multi-line
-    strings (triple-quoted). On success, writes the file in place.
+    strings. On success, writes the file in place.
     """
     text = pyproject.read_text()
     lines = text.splitlines(keepends=True)
@@ -55,26 +59,32 @@ def delete_entry(pyproject: Path, name: str) -> DeleteResult:
             reason="could not parse: inline-table form for [[tool.auntiepypi.servers]]",
         )
 
+    # Collect all blocks matching `name`.  Bail out early if any matching
+    # block contains triple-quoted strings (unparseable).
     blocks = list(_iter_blocks(lines))
-    matched: tuple[int, int] | None = None
+    matching: list[tuple[int, int]] = []
     for start, end in blocks:
-        block_text = "".join(lines[start:end])
-        if _TRIPLE_DOUBLE in block_text or _TRIPLE_SINGLE in block_text:
-            block_name = _block_name(lines[start:end])
-            if block_name == name:
-                return DeleteResult(
-                    ok=False,
-                    reason="could not parse: multi-line string in target block",
-                )
+        block_lines = lines[start:end]
+        block_text = "".join(block_lines)
+        if _block_name(block_lines) != name:
             continue
-        if _block_name(lines[start:end]) == name:
-            matched = (start, end)
-            break
+        if _TRIPLE_DOUBLE in block_text or _TRIPLE_SINGLE in block_text:
+            return DeleteResult(
+                ok=False,
+                reason="could not parse: multi-line string in target block",
+            )
+        matching.append((start, end))
 
-    if matched is None:
+    if not matching:
         return DeleteResult(ok=False, reason=f"entry not found: {name!r}")
 
-    start, end = matched
+    if which >= len(matching):
+        return DeleteResult(
+            ok=False,
+            reason=f"no occurrence at index {which} for {name!r} ({len(matching)} found)",
+        )
+
+    start, end = matching[which]
     if end < len(lines) and lines[end].strip() == "":
         end += 1
 

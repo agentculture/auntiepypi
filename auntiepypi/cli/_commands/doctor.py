@@ -97,13 +97,20 @@ def _apply(items: list[_Item], decisions: Decisions) -> dict[str, ActionResult]:
     → dispatch actionable entries.
     """
     half_sup = [it for it in items if it.action_class == "half_supervised"]
-    decided_duplicates: list[_Item] = []
+
+    # For each duplicate gap with a decision, compute (name, original_idx) pairs
+    # to delete — everything except the kept index.  Iterate ALL items (not just
+    # "ambiguous") because when a decision is supplied the item may already be
+    # re-classified (e.g. "skip/healthy").  Deduplicate by (name, original_idx)
+    # and sort DESCENDING so later deletions don't shift earlier indices.
+    duplicate_deletions: list[tuple[str, int]] = []
+    seen_names: set[str] = set()
     for it in items:
-        if it.action_class != "ambiguous":
-            continue
         for gap in it.config_gaps:
             if gap.kind != "duplicate":
                 continue
+            if gap.name in seen_names:
+                continue  # already processed this duplicate group
             chosen = decisions.for_key("duplicate", gap.name)
             if chosen is None:
                 continue
@@ -111,21 +118,22 @@ def _apply(items: list[_Item], decisions: Decisions) -> dict[str, ActionResult]:
                 keep_idx = int(chosen) - 1
             except ValueError:
                 continue
-            duplicates_with_name = [
-                x for x in items if x.spec is not None and x.spec.name == gap.name
-            ]
-            for idx, dup in enumerate(duplicates_with_name):
-                if idx != keep_idx and dup not in decided_duplicates:
-                    decided_duplicates.append(dup)
+            seen_names.add(gap.name)
+            for original_idx in gap.lines:
+                if original_idx != keep_idx:
+                    duplicate_deletions.append((gap.name, original_idx))
+
+    # Descending by original_idx so each deletion leaves earlier indices intact.
+    duplicate_deletions.sort(key=lambda p: -p[1])
 
     pyproject = find_pyproject()
-    pending_mutations = bool(half_sup or decided_duplicates)
+    pending_mutations = bool(half_sup or duplicate_deletions)
     if pending_mutations and pyproject is not None:
         bak = snapshot(pyproject)
         emit_diagnostic(f"wrote {bak.name} (rollback: mv {bak.name} {pyproject.name})")
 
     if pyproject is not None:
-        for it in half_sup + decided_duplicates:
+        for it in half_sup:
             result = delete_entry(pyproject, it.detection.name)
             if result.ok:
                 lines = result.lines_removed
@@ -136,6 +144,18 @@ def _apply(items: list[_Item], decisions: Decisions) -> dict[str, ActionResult]:
                 )
             else:
                 emit_diagnostic(f"could not auto-delete {it.detection.name!r}: {result.reason}")
+
+        for name, which in duplicate_deletions:
+            result = delete_entry(pyproject, name, which=which)
+            if result.ok:
+                lines = result.lines_removed
+                lines_str = f"{lines[0]}-{lines[1]}" if lines else "?"
+                emit_diagnostic(
+                    f"wrote {pyproject.name}: removed [[tool.auntiepypi.servers]] entry "
+                    f"{name!r} occurrence {which} (lines {lines_str})"
+                )
+            else:
+                emit_diagnostic(f"could not auto-delete {name!r} (which={which}): {result.reason}")
 
     action_results: dict[str, ActionResult] = {}
     for it in items:

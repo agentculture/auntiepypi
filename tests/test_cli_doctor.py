@@ -428,3 +428,121 @@ dockerfile = "./Dockerfile"
     )
     rc = cmd_doctor(_make_args(apply=True))
     assert rc == EXIT_SUCCESS
+
+
+# ---------------------------------------------------------------------------
+# T13: --decide=duplicate:NAME=N resolution
+# ---------------------------------------------------------------------------
+
+
+def test_doctor_dry_run_shows_decide_instructions_for_duplicate(tmp_path, monkeypatch, capsys):
+    from auntiepypi._detect._detection import Detection
+
+    monkeypatch.chdir(tmp_path)
+    _write_pyproject(
+        tmp_path,
+        """\
+[[tool.auntiepypi.servers]]
+name = "main"
+flavor = "pypiserver"
+port = 8080
+managed_by = "manual"
+
+[[tool.auntiepypi.servers]]
+name = "main"
+flavor = "devpi"
+port = 3141
+managed_by = "manual"
+""",
+    )
+    monkeypatch.setattr(
+        "auntiepypi.cli._commands.doctor.detect_all",
+        lambda *a, **kw: [
+            Detection(
+                name="main",
+                flavor="pypiserver",
+                host="127.0.0.1",
+                port=8080,
+                url="http://127.0.0.1:8080/",
+                status="up",
+                source="declared",
+                managed_by="manual",
+            ),
+            Detection(
+                name="main",
+                flavor="devpi",
+                host="127.0.0.1",
+                port=3141,
+                url="http://127.0.0.1:3141/+api",
+                status="up",
+                source="declared",
+                managed_by="manual",
+            ),
+        ],
+    )
+    rc = cmd_doctor(_make_args())
+    assert rc == EXIT_SUCCESS
+    out = capsys.readouterr().out
+    assert "ambiguous" in out
+    assert "--decide=duplicate:main=" in out
+
+
+def test_doctor_apply_with_decide_deletes_non_kept_duplicate(tmp_path, monkeypatch, capsys):
+    from auntiepypi._detect._detection import Detection
+
+    monkeypatch.chdir(tmp_path)
+    p = _write_pyproject(
+        tmp_path,
+        """\
+[[tool.auntiepypi.servers]]
+name = "main"
+flavor = "pypiserver"
+port = 8080
+managed_by = "manual"
+
+[[tool.auntiepypi.servers]]
+name = "main"
+flavor = "devpi"
+port = 3141
+managed_by = "manual"
+""",
+    )
+    monkeypatch.setattr(
+        "auntiepypi.cli._commands.doctor.detect_all",
+        lambda *a, **kw: [
+            Detection(
+                name="main",
+                flavor="pypiserver",
+                host="127.0.0.1",
+                port=8080,
+                url="http://127.0.0.1:8080/",
+                status="up",
+                source="declared",
+                managed_by="manual",
+            ),
+            Detection(
+                name="main",
+                flavor="devpi",
+                host="127.0.0.1",
+                port=3141,
+                url="http://127.0.0.1:3141/+api",
+                status="up",
+                source="declared",
+                managed_by="manual",
+            ),
+        ],
+    )
+    rc = cmd_doctor(_make_args(apply=True, decide=["duplicate:main=1"]))
+    assert rc == EXIT_SUCCESS
+    text = p.read_text()
+    # =1 means keep first; second (devpi/3141) should be deleted.
+    assert "3141" not in text
+    assert "8080" in text
+
+
+def test_doctor_apply_unknown_decide_key_exits_1(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    _no_servers_anywhere(monkeypatch)
+    with pytest.raises(AfiError) as excinfo:
+        cmd_doctor(_make_args(apply=True, decide=["unknown:foo=bar"]))
+    assert excinfo.value.code == 1

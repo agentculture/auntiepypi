@@ -126,3 +126,37 @@ def test_snapshot_exhaustion(tmp_path, monkeypatch):
         snapshot(p)
     assert excinfo.value.code == 1
     assert "clean up" in excinfo.value.remediation
+
+
+def test_delete_entry_which_picks_second(tmp_path):
+    """`which=1` deletes the second occurrence of a duplicated name."""
+    p = tmp_path / "pyproject.toml"
+    p.write_text("""\
+[[tool.auntiepypi.servers]]
+name = "main"
+flavor = "pypiserver"
+port = 8080
+
+[[tool.auntiepypi.servers]]
+name = "main"
+flavor = "devpi"
+port = 3141
+""")
+    result = delete_entry(p, "main", which=1)
+    assert result.ok is True
+    text = p.read_text()
+    assert "8080" in text  # first kept
+    assert "3141" not in text  # second deleted
+
+
+def test_delete_entry_which_out_of_range(tmp_path):
+    p = tmp_path / "pyproject.toml"
+    p.write_text("""\
+[[tool.auntiepypi.servers]]
+name = "main"
+flavor = "pypiserver"
+port = 8080
+""")
+    result = delete_entry(p, "main", which=5)
+    assert result.ok is False
+    assert "no occurrence" in result.reason.lower() or "out of range" in result.reason.lower()
