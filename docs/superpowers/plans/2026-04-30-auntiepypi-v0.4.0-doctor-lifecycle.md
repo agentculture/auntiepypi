@@ -281,7 +281,7 @@ Expected: `ImportError: cannot import name 'path_for'`.
 
 The `command` strategy detaches via ``Popen`` and redirects stdio to a
 log file. The path is ``$XDG_STATE_HOME/auntiepypi/<slug>.log`` (or
-``~/.local/state/auntiepypi/<slug>.log`` when XDG is unset).
+``$HOME/.local/state/auntiepypi/<slug>.log`` when XDG is unset).
 """
 from __future__ import annotations
 

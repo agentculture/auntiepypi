@@ -377,7 +377,7 @@ logs and the unit owns the PID; doctor doesn't echo them.
 **Action:**
 
 ```python
-log_path = _logs.path_for(spec.name)              # ~/.local/state/auntiepypi/<name>.log
+log_path = _logs.path_for(spec.name)              # $HOME/.local/state/auntiepypi/<name>.log
 log_path.parent.mkdir(parents=True, exist_ok=True)
 with open(log_path, "ab") as logf:
     logf.write(f"\n=== {datetime.now(UTC).isoformat()}: starting {spec.command} ===\n".encode())
