@@ -58,6 +58,14 @@ def test_command_happy_path(tmp_path, monkeypatch):
         assert result.log_path is not None
         assert result.pid is not None
         assert Path(result.log_path).exists()
+        # PID file + sidecar were written on success
+        from auntiepypi._actions import _pid
+
+        record = _pid.read("test")
+        assert record is not None
+        assert record.pid == result.pid
+        assert record.port == port
+        assert tuple(record.argv) == cmd
     finally:
         if result and result.pid:
             try:
@@ -66,6 +74,18 @@ def test_command_happy_path(tmp_path, monkeypatch):
                 os.killpg(os.getpgid(result.pid), signal.SIGTERM)  # NOSONAR python:S4828
             except ProcessLookupError:
                 pass
+
+
+def test_command_failed_start_does_not_write_pid_file(tmp_path, monkeypatch):
+    """A failing start (command not found) leaves no PID file behind."""
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path))
+    port = _free_port()
+    spec = _spec("missing-binary", port, ("definitely_not_a_real_binary_42",))
+    result = start(_detection(port), spec)
+    assert result.ok is False
+    from auntiepypi._actions import _pid
+
+    assert _pid.read("missing-binary") is None
 
 
 def test_command_not_found(tmp_path, monkeypatch):

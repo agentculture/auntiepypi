@@ -15,6 +15,7 @@ import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 
+from auntiepypi._actions import _pid
 from auntiepypi._actions._action import ActionResult
 from auntiepypi._actions._logs import path_for
 from auntiepypi._actions._reprobe import probe
@@ -66,6 +67,19 @@ def start(detection: Detection, declaration: ServerSpec) -> ActionResult:
     pid = proc.pid
     result = probe(detection)
     if result.status == "up":
+        # Persist PID + sidecar for future `auntie down` / `restart`.
+        try:
+            _pid.write(
+                declaration.name,
+                pid=pid,
+                argv=list(declaration.command),
+                port=declaration.port,
+            )
+        except OSError:
+            # PID file write failed; the start itself succeeded so we keep
+            # ok=True. The fallback path-walk in `command.stop` will still
+            # find the process by port + argv match.
+            pass
         return ActionResult(
             ok=True,
             detail="started",
