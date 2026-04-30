@@ -29,15 +29,17 @@ locally. Informational, not gating.
 - `auntie doctor [TARGET] [--apply] [--decide KEY=VALUE] [--json]` —
   probe + diagnose declared inventory; `--apply` starts servers and
   deletes half-supervised entries; `--decide` resolves ambiguous cases.
-- `auntie up <name> | --all` — start a declared server (or every
-  supervised one). Bare `auntie up` is reserved for v0.6.0's
-  first-party server.
-- `auntie down <name> | --all` — stop a declared server (or every
-  supervised one). For `command` strategy: SIGTERM with 5 s grace,
-  SIGKILL fallback.
-- `auntie restart <name> | --all` — atomic restart for `systemd-user`,
+- `auntie up [name | --all]` — start a server. Bare form starts the
+  first-party PEP 503 simple-index (v0.6.0+); a `<name>` targets one
+  declared `[[tool.auntiepypi.servers]]`; `--all` aggregates the
+  first-party server plus every supervised declaration.
+- `auntie down [name | --all]` — stop a server. Same target shape as
+  `up`. For `command` strategy: SIGTERM with 5 s grace, SIGKILL
+  fallback.
+- `auntie restart [name | --all]` — atomic restart for `systemd-user`,
   stop+start for `command`. Always re-spawns from the current
-  `pyproject.toml` argv.
+  `pyproject.toml` argv (or `[tool.auntiepypi.local]` for the bare
+  form).
 - `auntie whoami` — auth/env probe; reports configured indexes.
 
 ## Console scripts
@@ -229,23 +231,26 @@ a remediation hint to clean up old `.bak` files.
 """
 
 _LIFECYCLE_PREAMBLE = """\
-The lifecycle verbs (`up`, `down`, `restart`) operate on declared servers
-in `[[tool.auntiepypi.servers]]` whose `managed_by` is `systemd-user` or
-`command`. Other modes (`manual`, `docker`, `compose`, unset) are
-out-of-scope for v0.5.0 and refused with a clear error.
+The lifecycle verbs (`up`, `down`, `restart`) operate on three classes of
+target:
 
-## Bare invocation reserved
+- The **first-party server** — auntie's own PEP 503 simple-index,
+  configured by `[tool.auntiepypi.local]`. Default port 3141; default
+  wheelhouse `$XDG_DATA_HOME/auntiepypi/wheels/`. Loopback-only in
+  v0.6.0; auth + TLS land in v0.7.0.
+- A **named declaration** in `[[tool.auntiepypi.servers]]` whose
+  `managed_by` is `systemd-user` or `command`.
+- All supervised targets at once via `--all`.
 
-`auntie up` (and `down` / `restart`) with no target and no `--all` is
-reserved for v0.6.0, where it will start auntie's own first-party
-PEP 503 simple-index server. v0.5.0 only accepts the `<name>` and
-`--all` forms.
+Other modes (`manual`, `docker`, `compose`, unset) are out-of-scope and
+refused with a clear error. The name `"auntie"` is reserved — declared
+specs that use it are rejected.
 
 ## Common shape
 
-    auntie <verb>                       # exit 1, "lands in v0.6.0"
+    auntie <verb>                       # first-party server
     auntie <verb> <name>                # one declared server
-    auntie <verb> --all                 # every supervised declaration
+    auntie <verb> --all                 # first-party + every supervised
     auntie <verb> --json                # JSON envelope
     auntie <verb> --decide=duplicate:NAME=N <name>
 
@@ -259,19 +264,24 @@ PEP 503 simple-index server. v0.5.0 only accepts the `<name>` and
 _UP = """\
 # auntie up
 
-Start a declared server.
+Start a server.
 
 %s
 
 ## What it does
 
+- **bare** (`auntie up`) → start the first-party PEP 503 simple-index
+  on `[tool.auntiepypi.local].host:port`. The auntie strategy spawns
+  `python -m auntiepypi._server --host H --port P --root R` detached
+  and tracks it via `auntie_<port>.pid`. The wheelhouse is created
+  with `mkdir -p` if missing.
 - `managed_by = "systemd-user"` → `systemctl --user start <unit>` +
   re-probe (5 s budget; "up" wins).
 - `managed_by = "command"` → detached `Popen` with
   `start_new_session=True`; logs to
   `$XDG_STATE_HOME/auntiepypi/<slug>.log`; on success writes
-  `<slug>.pid` + `<slug>.json` sidecar so future `auntie down` /
-  `restart` can find the process.
+  `<slug>_<port>.pid` + `<slug>_<port>.json` sidecar so future
+  `auntie down` / `restart` can find the process.
 - Idempotent: an already-up server is a successful no-op.
 
 ## Drift handling
@@ -283,16 +293,20 @@ fresh spawn.
 _DOWN = """\
 # auntie down
 
-Stop a declared server.
+Stop a server.
 
 %s
 
 ## What it does
 
+- **bare** (`auntie down`) → stop the first-party PEP 503 simple-index.
+  Reads `auntie_<port>.pid`, SIGTERMs, escalates to SIGKILL if needed,
+  clears the PID file. Idempotent.
 - `managed_by = "systemd-user"` → `systemctl --user stop <unit>` +
   re-probe with `desired="down"`.
-- `managed_by = "command"` → read `<slug>.pid`; SIGTERM; poll the port
-  for up to 5 s; if still bound, SIGKILL with another 2 s grace.
+- `managed_by = "command"` → read `<slug>_<port>.pid`; SIGTERM; poll
+  the port for up to 5 s; if still bound, SIGKILL with another 2 s
+  grace.
 - Fallback: when no PID file exists (Linux only), walks
   `/proc/net/tcp` + `/proc/<pid>/fd/*` to find the listener on the
   declared port. Refuses to kill unless the discovered process's argv
@@ -310,12 +324,15 @@ kill`. Inspect with `auntie overview --proc`.
 _RESTART = """\
 # auntie restart
 
-Restart a declared server.
+Restart a server.
 
 %s
 
 ## What it does
 
+- **bare** (`auntie restart`) → stop + start the first-party server
+  using the current `[tool.auntiepypi.local]` config (so a port or
+  wheelhouse change between starts takes effect on restart).
 - `managed_by = "systemd-user"` → `systemctl --user restart <unit>`
   (atomic; faster and safer than stop+start).
 - `managed_by = "command"` → `down` then `up`. The new spawn re-uses
@@ -327,7 +344,8 @@ Restart a declared server.
 ## Drift policy
 
 Source of truth is always current `pyproject.toml`. Edit your
-`command` array, then `auntie restart <name>`.
+`command` array (or `[tool.auntiepypi.local]` for the first-party
+server), then `auntie restart [<name>]`.
 """ % _LIFECYCLE_PREAMBLE
 
 _WHOAMI = """\
