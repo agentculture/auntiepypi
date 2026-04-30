@@ -20,12 +20,7 @@ from auntiepypi._detect import (
     load_servers,
 )
 from auntiepypi._packages_config import ConfigError, load_package_names
-from auntiepypi.cli._commands._packages.overview import (
-    _dashboard,
-    _deep_dive,
-    _emit,
-    _fetch_pair,
-)
+from auntiepypi._packages_view import _dashboard, _deep_dive, _emit, _fetch_pair
 from auntiepypi.cli._errors import EXIT_USER_ERROR, AfiError
 from auntiepypi.cli._output import emit_diagnostic, emit_result
 

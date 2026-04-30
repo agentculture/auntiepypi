@@ -1,26 +1,25 @@
-"""``auntiepypi packages overview [PKG]`` — informational, not gating.
+"""Helpers for rendering package overview sections (used by `auntie overview`).
 
-No arg → roll-up over the configured list (``[tool.auntiepypi].packages``).
-With arg → deep-dive over the rubric for one package.
+Provides ``_dashboard``, ``_deep_dive``, ``_emit``, and ``_fetch_pair`` —
+the same rendering logic that was previously in
+``auntiepypi.cli._commands._packages.overview``, extracted so that the top-level
+``auntie overview`` command can import them without pulling in the deleted
+``packages`` CLI noun.
 
-JSON envelope: ``{"subject", "sections": [...]}``. Each section carries
-``category="packages"``, a ``title``, a rolled-up ``light``, and ``fields``.
-Read-only. Exit code 0 regardless of how many packages roll up red.
+Read-only. No CLI entry points here.
 """
 
 from __future__ import annotations
 
-import argparse
 import re
 from concurrent.futures import ThreadPoolExecutor
 
-from auntiepypi._packages_config import ConfigError, load_package_names
+from auntiepypi._packages_config import ConfigError  # noqa: F401 — re-exported for callers
 from auntiepypi._rubric import DIMENSIONS, Dimension
 from auntiepypi._rubric._fetch import FetchError
 from auntiepypi._rubric._runtime import evaluate_package, roll_up
 from auntiepypi._rubric._sources import fetch_pypi, fetch_pypistats
-from auntiepypi.cli._errors import EXIT_ENV_ERROR, EXIT_USER_ERROR, AfiError
-from auntiepypi.cli._output import emit_diagnostic, emit_result
+from auntiepypi.cli._output import emit_result
 
 # PEP 508 normalised name regex (per packaging.utils.canonicalize_name input).
 _NAME_RE = re.compile(r"^[A-Za-z0-9]([A-Za-z0-9._-]*[A-Za-z0-9])?$")
@@ -28,6 +27,8 @@ _INDEX_VALUE = "pypi.org"
 
 
 def _validate_name(pkg: str) -> None:
+    from auntiepypi.cli._errors import EXIT_USER_ERROR, AfiError
+
     if not _NAME_RE.match(pkg):
         raise AfiError(
             code=EXIT_USER_ERROR,
@@ -179,63 +180,3 @@ def _emit(payload: dict, json_mode: bool) -> None:
         emit_result(payload, json_mode=True)
     else:
         emit_result(_render_text(payload), json_mode=False)
-
-
-def cmd_packages_overview(args: argparse.Namespace) -> int:
-    json_mode = bool(getattr(args, "json", False))
-    pkg = args.pkg
-    if pkg is None:
-        try:
-            names = load_package_names()
-        except ConfigError as err:
-            raise AfiError(
-                code=EXIT_USER_ERROR,
-                message=str(err),
-                remediation=(
-                    "add a [tool.auntiepypi] table to pyproject.toml with a "
-                    "non-empty `packages = [...]` list"
-                ),
-            ) from err
-        payload, warnings, env_failures = _dashboard(names)
-        for w in warnings:
-            emit_diagnostic(f"warning: {w}")
-        _emit(payload, json_mode)
-        if env_failures == len(names) and len(names) > 0:
-            return EXIT_ENV_ERROR
-        return 0
-
-    _validate_name(pkg)
-    pypi, stats, warnings, env_failure = _fetch_pair(pkg)
-    for w in warnings:
-        emit_diagnostic(f"warning: {w}")
-    payload = _deep_dive(pkg, pypi, stats)
-    _emit(payload, json_mode)
-    if env_failure:
-        return EXIT_ENV_ERROR
-    return 0
-
-
-def register(sub: argparse._SubParsersAction) -> None:  # type: ignore[type-arg]
-    p = sub.add_parser(
-        "packages",
-        help="Manage and report on PyPI packages.",
-    )
-    sp = p.add_subparsers(dest="packages_verb")
-    ov = sp.add_parser(
-        "overview",
-        help="Roll-up dashboard or per-package deep-dive (informational, not gating).",
-    )
-    ov.add_argument(
-        "pkg",
-        nargs="?",
-        default=None,
-        help="Package name; omit for the dashboard over [tool.auntiepypi].packages.",
-    )
-    ov.add_argument("--json", action="store_true", help="Emit structured JSON.")
-    ov.set_defaults(func=cmd_packages_overview)
-
-    def _packages_no_verb(args: argparse.Namespace) -> int:
-        p.print_help()
-        return EXIT_USER_ERROR
-
-    p.set_defaults(func=_packages_no_verb)
