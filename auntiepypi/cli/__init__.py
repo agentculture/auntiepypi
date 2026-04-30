@@ -17,9 +17,12 @@ import sys
 
 from auntiepypi import __version__
 from auntiepypi.cli._commands import doctor as _doctor_cmd
+from auntiepypi.cli._commands import down as _down_cmd
 from auntiepypi.cli._commands import explain as _explain_cmd
 from auntiepypi.cli._commands import learn as _learn_cmd
 from auntiepypi.cli._commands import overview as _overview_cmd
+from auntiepypi.cli._commands import restart as _restart_cmd
+from auntiepypi.cli._commands import up as _up_cmd
 from auntiepypi.cli._commands import whoami as _whoami_cmd
 from auntiepypi.cli._errors import EXIT_USER_ERROR, AfiError
 from auntiepypi.cli._output import emit_error
@@ -55,6 +58,9 @@ def _build_parser() -> argparse.ArgumentParser:
     _explain_cmd.register(sub)
     _overview_cmd.register(sub)
     _doctor_cmd.register(sub)
+    _up_cmd.register(sub)
+    _down_cmd.register(sub)
+    _restart_cmd.register(sub)
     _whoami_cmd.register(sub)
 
     return parser
