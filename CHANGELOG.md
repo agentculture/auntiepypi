@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-04-30
+
+### Added
+
+- `auntie up <name>` / `auntie up --all` — start a declared server, or every supervised declaration. Bare `auntie up` is reserved for v0.6.0's first-party server.
+- `auntie down <name>` / `auntie down --all` — stop a declared server. For `managed_by=command`: SIGTERM with 5 s grace, then SIGKILL. PID-tracked via XDG state directory.
+- `auntie restart <name>` / `auntie restart --all` — atomic for `systemd-user` (`systemctl --user restart`); stop+start for `command`. Re-spawns from current pyproject argv (sidecar argv is advisory; drift logged).
+- `_actions/_pid.py` — PID file + sidecar (`<slug>.pid`, `<slug>.json`) with atomic write via `tempfile.mkstemp` + `os.replace`. Liveness check via `os.kill(pid, 0)`; stale records cleaned up on read.
+- `_actions/_pid.find_by_port` — Linux-only port-walk fallback for `command.stop` when no PID file exists. Argv-match guard prevents accidentally killing an unrelated process bound to the same port.
+- `_reprobe.probe(*, desired="up"|"down")` — extended polling loop supports stop-path verification; `desired="down"` matches both "down" and "absent".
+- `auntie explain up` / `down` / `restart` catalog entries with shared lifecycle preamble.
+
+### Changed
+
+- `_actions/<strategy>.apply` → `_actions/<strategy>.start` (internal rename). The single-action contract is replaced by sibling `start` / `stop` / `restart` per strategy.
+- `_actions.dispatch` widened to `dispatch(action, detection, declaration)`. `ACTIONS` is now `dict[str, dict[str, Strategy]]` keyed on `(managed_by, action)`. Doctor's `--apply` rewires to `dispatch("start", ...)`.
+- `learn` and the explain catalog now describe the three new verbs; the v0.4.0 drift-detection test continues to pass.
+
 ## [0.4.0] - 2026-04-30
 
 ### Added
