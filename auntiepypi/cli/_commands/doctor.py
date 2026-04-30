@@ -1,183 +1,271 @@
-"""``auntiepypi doctor`` — probe + diagnose; ``--fix`` starts configured servers.
+"""``auntie doctor`` — diagnose declared inventory; ``--apply`` acts on it.
 
-Default is dry-run: prints which servers would be started, returns the
-overview-style payload but with a ``diagnoses`` field per item. ``--fix``
-runs each ``down``/``absent`` server's ``start_command`` via
-``subprocess.run`` and re-probes.
+Doctor consumes ``_detect/.detect_all`` (same source as ``overview``),
+groups detections into action classes (``actionable``,
+``half_supervised``, ``ambiguous``, ``skip``), and emits a structured
+payload with per-entry ``diagnosis`` and ``remediation``.
 
-Mutating verbs default to dry-run (per CLAUDE.md "every write verb defaults
-to dry-run"). ``--fix`` is doctor's apply gate.
-
-Exit codes:
-
-* ``0`` — every server is up (or ``--fix`` brought every down/absent server up).
-* ``2`` — a ``--fix`` attempt failed (start_command not on PATH, non-zero exit, …).
+T11 scope: detection wiring + diagnosis (no --apply action; that's T12).
 """
 
 from __future__ import annotations
 
 import argparse
-import subprocess
-from typing import Callable
+from dataclasses import dataclass
 
-from auntiepypi._probes import PROBES, probe_status
-from auntiepypi._probes._probe import Probe
-from auntiepypi._probes._runtime import ProbeResult
-from auntiepypi.cli._errors import EXIT_ENV_ERROR, EXIT_SUCCESS, AfiError
+from auntiepypi import _actions
+from auntiepypi._detect import detect_all
+from auntiepypi._detect._config import (
+    ConfigGap,
+    ServerSpec,
+    load_servers_lenient,
+)
+from auntiepypi._detect._detection import Detection
+from auntiepypi.cli._commands._decide import Decisions, parse_decisions
+from auntiepypi.cli._errors import EXIT_SUCCESS
 from auntiepypi.cli._output import emit_diagnostic, emit_result
 
-_SUBJECT = "auntiepypi doctor"
-
-# Indirection for tests: monkey-patch this to a FakeRunner instead of subprocess.run.
-RUN: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run
+_SUBJECT = "auntie doctor"
 
 
-def _diagnose(item: ProbeResult, probe: Probe) -> dict[str, object]:
-    out: dict[str, object] = dict(item)
-    if item["status"] == "up":
-        out["diagnosis"] = "healthy"
-        out["remediation"] = None
-        return out
-    if not probe.start_command:
-        out["diagnosis"] = f"{item['status']}; no start_command configured"
-        out["remediation"] = "configure start_command in the probe definition"
-        return out
-    out["diagnosis"] = f"{item['status']}; would run start_command"
-    out["remediation"] = list(probe.start_command)
-    return out
-
-
-def _try_start(probe: Probe) -> tuple[bool, str]:
-    """Run ``probe.start_command``; return (ok, detail)."""
-    try:
-        completed = RUN(
-            list(probe.start_command),
-            check=False,
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-    except FileNotFoundError as err:
-        return False, f"command not found: {err.filename}"
-    except (OSError, subprocess.SubprocessError) as err:
-        return False, f"{err.__class__.__name__}: {err}"
-    if completed.returncode != 0:
-        snippet = (completed.stderr or completed.stdout or "").strip().splitlines()
-        msg = snippet[0] if snippet else f"exit {completed.returncode}"
-        return False, f"exit {completed.returncode}: {msg}"
-    return True, "started"
-
-
-def _apply_fix(item: dict[str, object], probe: Probe) -> None:
-    """Run ``probe.start_command`` and re-probe, updating ``item`` in place."""
-    ok, detail = _try_start(probe)
-    item["fix_attempted"] = True
-    item["fix_ok"] = ok
-    item["fix_detail"] = detail
-    if not ok:
-        return
-    rechecked = probe_status(probe)
-    item["status"] = rechecked["status"]
-    item["url"] = rechecked["url"]
-    if rechecked.get("detail"):
-        item["detail"] = rechecked["detail"]
-    if rechecked["status"] == "up":
-        item["diagnosis"] = "fixed"
-
-
-def _process_probe(probe: Probe, *, fix: bool) -> dict[str, object]:
-    """Diagnose one probe; under ``--fix``, attempt remediation and re-probe."""
-    item = _diagnose(probe_status(probe), probe)
-    if item["status"] == "up":
-        return item
-    if fix and probe.start_command:
-        _apply_fix(item, probe)
-    else:
-        item["fix_attempted"] = False
-    return item
-
-
-def _build_payload(*, fix: bool) -> tuple[dict[str, object], bool]:
-    """Return (payload, ok). When ``fix`` is True, runs start_commands.
-
-    ``ok`` is computed from the **final post-fix probe statuses**, not from
-    the start_command return codes. This is the contract `learn` /
-    `explain doctor` document: a `--fix` attempt is only successful if the
-    server is `up` after the re-probe.
-    """
-    items = [_process_probe(probe, fix=fix) for probe in PROBES]
-    section = {"name": "local-pypi-servers", "summary": _summary(items), "items": items}
-    payload = {
-        "subject": _SUBJECT,
-        "sections": [section],
-        "fix_applied": fix,
-    }
-    ok = all(item["status"] == "up" for item in items)
-    return payload, ok
-
-
-def _summary(items: list[dict[str, object]]) -> str:
-    counts: dict[str, int] = {}
-    for item in items:
-        counts[str(item["status"])] = counts.get(str(item["status"]), 0) + 1
-    return ", ".join(f"{n} {s}" for s, n in sorted(counts.items()))
-
-
-def _render_text(payload: dict[str, object]) -> str:
-    lines = [f"# {payload['subject']}"]
-    for section in payload["sections"]:
-        lines.append("")
-        lines.append(f"## {section['name']}")
-        lines.append(f"summary: {section['summary']}")
-        lines.append("")
-        for item in section["items"]:
-            lines.append(f"  {item['name']:<12}  {item['status']:<7}  {item['diagnosis']}")
-            rem = item.get("remediation")
-            if isinstance(rem, list):
-                lines.append(f"      remediation: {' '.join(rem)}")
-            elif isinstance(rem, str):
-                lines.append(f"      remediation: {rem}")
-            if item.get("fix_attempted"):
-                ok = "ok" if item.get("fix_ok") else "FAILED"
-                lines.append(f"      fix: {ok} ({item.get('fix_detail')})")
-    if not payload["fix_applied"]:
-        lines.append("")
-        lines.append("(dry-run; pass --fix to apply remediations)")
-    return "\n".join(lines)
+@dataclass
+class _Item:
+    detection: Detection
+    spec: ServerSpec | None
+    config_gaps: list[ConfigGap]
+    action_class: str  # "actionable" | "half_supervised" | "ambiguous" | "skip"
+    diagnosis: str
+    remediation: str
 
 
 def cmd_doctor(args: argparse.Namespace) -> int:
-    fix = bool(getattr(args, "fix", False))
+    cfg, gaps = load_servers_lenient()
+    detections = detect_all(cfg)
+    decisions = parse_decisions(getattr(args, "decide", None) or [])
+
+    items = _build_items(detections, cfg.specs, gaps, decisions)
+
+    target = getattr(args, "target", None)
+    if target:
+        items = [it for it in items if it.detection.name == target]
+        if not items:
+            emit_diagnostic(
+                f"doctor: unknown TARGET {target!r}; run `auntie doctor` to see all entries"
+            )
+            return EXIT_SUCCESS
+
+    apply_mode = bool(getattr(args, "apply", False))
     json_mode = bool(getattr(args, "json", False))
-    payload, ok = _build_payload(fix=fix)
+
+    payload = _build_payload(items, applied=apply_mode)
 
     if json_mode:
         emit_result(payload, json_mode=True)
     else:
-        emit_result(_render_text(payload), json_mode=False)
+        emit_result(_render_text(payload, items, apply_mode), json_mode=False)
+    return EXIT_SUCCESS
 
-    if fix and not ok:
-        # `--fix` did not bring every server up (either start_command itself
-        # failed, or it returned 0 but the post-fix re-probe still reports
-        # down/absent). Either case violates the documented contract.
-        # Dry-run never escalates: doctor's job is to surface, not enforce.
-        emit_diagnostic("doctor: at least one server is still not up after --fix")
-        raise AfiError(
-            code=EXIT_ENV_ERROR,
-            message="doctor: --fix did not bring every server up",
-            remediation=(
-                "inspect the JSON payload's fix_detail field (when present) and"
-                " each item's final status to identify the failing server"
+
+def _build_items(detections, specs, gaps, decisions: Decisions) -> list[_Item]:
+    by_name: dict[str, ServerSpec] = {s.name: s for s in specs}
+    gaps_by_name: dict[str, list[ConfigGap]] = {}
+    for g in gaps:
+        gaps_by_name.setdefault(g.name, []).append(g)
+
+    items: list[_Item] = []
+    for det in detections:
+        spec = by_name.get(det.name)
+        item_gaps = gaps_by_name.get(det.name, []) if spec else []
+        action_class, diagnosis, remediation = _classify(det, spec, item_gaps, decisions)
+        items.append(
+            _Item(
+                detection=det,
+                spec=spec,
+                config_gaps=item_gaps,
+                action_class=action_class,
+                diagnosis=diagnosis,
+                remediation=remediation,
+            )
+        )
+    return items
+
+
+def _classify(
+    det: Detection,
+    spec: ServerSpec | None,
+    gaps: list[ConfigGap],
+    decisions: Decisions,
+) -> tuple[str, str, str]:
+    if spec is None:
+        return _classify_undeclared(det)
+
+    half_sup = next((g for g in gaps if g.kind == "missing-companion"), None)
+    duplicate = next((g for g in gaps if g.kind == "duplicate"), None)
+
+    if duplicate is not None and decisions.for_key("duplicate", det.name) is None:
+        return (
+            "ambiguous",
+            f"ambiguous: duplicate name {det.name!r}",
+            f"auntie doctor --apply --decide=duplicate:{det.name}=1   # or =2",
+        )
+
+    if half_sup is not None:
+        return (
+            "half_supervised",
+            "half-supervised; --apply would delete this entry",
+            (
+                f'add `{_companion_field(half_sup)} = "…"` to keep supervision, '
+                "or run `auntie doctor --apply` to demote to manual by deletion"
             ),
         )
-    return EXIT_SUCCESS
+
+    if det.status == "up":
+        return ("skip", "healthy", "")
+
+    mode = spec.managed_by
+    if mode in _actions.ACTIONS:
+        return (
+            "actionable",
+            f"{det.status}; would dispatch managed_by={mode!r}",
+            "auntie doctor --apply",
+        )
+    if mode in {"docker", "compose"}:
+        return ("skip", f"managed_by={mode} not implemented in v0.4.0", "")
+    return ("skip", "manual / unset — auntie does not supervise", "")
+
+
+def _classify_undeclared(det: Detection) -> tuple[str, str, str]:
+    stub = (
+        "[[tool.auntiepypi.servers]]\n"
+        'name = "…"\n'
+        f'flavor = "{det.flavor}"\n'
+        f"port = {det.port}\n"
+        'managed_by = "manual"'
+    )
+    return ("skip", "observed; not declared", stub)
+
+
+def _companion_field(gap: ConfigGap) -> str:
+    if "`" in gap.detail:
+        return gap.detail.split("`")[1]
+    return "?"
+
+
+def _build_payload(items: list[_Item], applied: bool) -> dict[str, object]:
+    """T11: minimal payload — extends in T12/T14."""
+    sections = []
+    for it in items:
+        fields = [
+            {"name": "flavor", "value": it.detection.flavor},
+            {"name": "host", "value": it.detection.host},
+            {"name": "port", "value": str(it.detection.port)},
+            {"name": "url", "value": it.detection.url},
+            {"name": "status", "value": it.detection.status},
+            {"name": "source", "value": it.detection.source},
+        ]
+        if it.spec and it.spec.managed_by:
+            fields.append({"name": "managed_by", "value": it.spec.managed_by})
+        for gap in it.config_gaps:
+            if gap.kind == "missing-companion":
+                fields.append({"name": "config_gap", "value": gap.detail})
+        fields.append({"name": "diagnosis", "value": it.diagnosis})
+        if it.remediation:
+            fields.append({"name": "remediation", "value": it.remediation})
+
+        sections.append(
+            {
+                "category": "servers",
+                "title": it.detection.name,
+                "light": _light_for(it),
+                "fields": fields,
+            }
+        )
+
+    by_status: dict[str, int] = {}
+    by_class: dict[str, int] = {}
+    for it in items:
+        by_status[it.detection.status] = by_status.get(it.detection.status, 0) + 1
+        by_class[it.action_class] = by_class.get(it.action_class, 0) + 1
+
+    return {
+        "subject": _SUBJECT,
+        "sections": sections,
+        "summary": {
+            "total": len(items),
+            "by_status": by_status,
+            "by_action_class": by_class,
+            "applied": applied,
+        },
+    }
+
+
+def _light_for(item: _Item) -> str:
+    if item.action_class == "half_supervised":
+        return "yellow"
+    if item.action_class == "skip" and "not implemented" in item.diagnosis:
+        return "yellow"
+    if item.detection.status == "up":
+        return "green"
+    if item.detection.status == "down":
+        return "red"
+    return "unknown"
+
+
+def _render_text(payload: dict, items: list[_Item], apply_mode: bool) -> str:
+    lines = [f"# {payload['subject']}"]
+    summary = payload["summary"]
+    by_class = summary["by_action_class"]
+    parts = [
+        f"{by_class.get('actionable', 0)} actionable",
+        f"{by_class.get('half_supervised', 0)} half-supervised",
+        f"{by_class.get('skip', 0)} skip",
+        f"{by_class.get('ambiguous', 0)} ambiguous",
+    ]
+    lines.append(f"summary: {', '.join(parts)} ({summary['total']} total)")
+    lines.append("")
+
+    for it in items:
+        det = it.detection
+        managed = it.spec.managed_by if it.spec and it.spec.managed_by else "—"
+        lines.append(f"  {det.name:<20}  {det.status:<7}  {det.source:<10}  managed_by={managed}")
+        for gap in it.config_gaps:
+            if gap.kind == "missing-companion":
+                lines.append(f"      config_gap: {gap.detail}")
+        lines.append(f"      diagnosis: {it.diagnosis}")
+        if it.remediation:
+            if "\n" in it.remediation:
+                lines.append("      remediation:")
+                for r in it.remediation.splitlines():
+                    lines.append(f"          {r}")
+            else:
+                lines.append(f"      remediation: {it.remediation}")
+
+    actionable_count = by_class.get("actionable", 0) + by_class.get("half_supervised", 0)
+    if not apply_mode and actionable_count:
+        lines.append("")
+        lines.append(f"(dry-run; pass --apply to act on {actionable_count} remediations)")
+    elif not apply_mode:
+        lines.append("")
+        lines.append("(dry-run; nothing to apply)")
+    return "\n".join(lines)
 
 
 def register(sub: argparse._SubParsersAction) -> None:
     p = sub.add_parser(
         "doctor",
-        help="Probe + diagnose local PyPI servers; with --fix, start them.",
+        help="Diagnose declared inventory; --apply to act (start servers, delete half-supervised).",
     )
-    p.add_argument("--fix", action="store_true", help="Apply remediations (start servers).")
+    p.add_argument("target", nargs="?", help="Drill into one declared entry by name.")
+    p.add_argument(
+        "--apply",
+        action="store_true",
+        help="Commit changes (start servers + edit pyproject.toml).",
+    )
+    p.add_argument(
+        "--decide",
+        action="append",
+        default=[],
+        help="Resolve an ambiguous case. Format: kind:name=value.",
+    )
     p.add_argument("--json", action="store_true", help="Emit structured JSON.")
     p.set_defaults(func=cmd_doctor)
