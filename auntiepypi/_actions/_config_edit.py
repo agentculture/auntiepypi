@@ -93,6 +93,21 @@ def delete_entry(pyproject: Path, name: str, *, which: int = 0) -> DeleteResult:
     return DeleteResult(ok=True, lines_removed=(start + 1, end))
 
 
+def _find_block_end(lines: list[str], start: int, n: int) -> int:
+    """Return the exclusive end index of the ``[[tool.auntiepypi.servers]]`` block at ``start``."""
+    j = start + 1
+    while j < n:
+        s = lines[j].strip()
+        if s.startswith("[[") and s != _SERVERS_HEADER:
+            break
+        if s.startswith("[") and not s.startswith("[["):
+            break
+        if s == _SERVERS_HEADER:
+            break
+        j += 1
+    return j
+
+
 def _iter_blocks(lines: list[str]):
     """Yield (start, end) for each `[[tool.auntiepypi.servers]]` block.
 
@@ -101,21 +116,10 @@ def _iter_blocks(lines: list[str]):
     n = len(lines)
     i = 0
     while i < n:
-        stripped = lines[i].strip()
-        if stripped == _SERVERS_HEADER:
-            start = i
-            j = i + 1
-            while j < n:
-                s = lines[j].strip()
-                if s.startswith("[") and not s.startswith("[["):
-                    break
-                if s.startswith("[[") and s != _SERVERS_HEADER:
-                    break
-                if s == _SERVERS_HEADER:
-                    break
-                j += 1
-            yield start, j
-            i = j
+        if lines[i].strip() == _SERVERS_HEADER:
+            end = _find_block_end(lines, i, n)
+            yield i, end
+            i = end
         else:
             i += 1
 

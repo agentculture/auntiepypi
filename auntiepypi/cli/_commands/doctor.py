@@ -12,8 +12,8 @@ T12 scope: --apply path — dispatch actionable, delete half-supervised, exit 2 
 from __future__ import annotations
 
 import argparse
-import dataclasses
-from dataclasses import dataclass
+from dataclasses import dataclass, replace as dc_replace
+from pathlib import Path
 
 from auntiepypi import _actions
 from auntiepypi._actions._action import ActionResult
@@ -94,27 +94,24 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     return EXIT_SUCCESS
 
 
-def _apply(items: list[_Item], decisions: Decisions) -> tuple[dict[str, ActionResult], set[str]]:
-    """Run the mutating apply path.
+def _stage_deletions(
+    items: list[_Item], decisions: Decisions
+) -> tuple[list[str], list[tuple[str, int]]]:
+    """Return staged deletion work as ``(half_sup_names, duplicate_dels)``.
 
-    Returns ``(action_results, deleted_names)`` where ``deleted_names`` is
-    the set of detection names that were *successfully* removed from
-    pyproject.toml. Entries that were refused (inline-table, multi-line
-    string) cause an immediate ``AfiError(code=1)`` rather than a silent
-    skip.
+    ``half_sup_names`` — detection names whose entries should be deleted
+    (half-supervised action class).
 
-    Order: stage all pending config-mutations → snapshot once → execute
-    deletions → dispatch actionable entries.
+    ``duplicate_dels`` — ``(name, occurrence_idx)`` pairs sorted descending
+    by occurrence so later deletions don't shift earlier indices.
     """
-    half_sup = [it for it in items if it.action_class == "half_supervised"]
+    half_sup_names = [it.detection.name for it in items if it.action_class == "half_supervised"]
 
     # For each duplicate gap with a decision, compute (name, occurrence_idx)
     # pairs to delete — everything except the kept index.  Iterate ALL items
     # (not just "ambiguous") because when a decision is supplied the item may
-    # already be re-classified (e.g. "skip/healthy").  Deduplicate by
-    # (name, occ_idx) and sort DESCENDING so later deletions don't shift
-    # earlier indices.
-    duplicate_deletions: list[tuple[str, int]] = []
+    # already be re-classified (e.g. "skip/healthy").  Deduplicate by name.
+    duplicate_dels: list[tuple[str, int]] = []
     seen_names: set[str] = set()
     for it in items:
         for gap in it.config_gaps:
@@ -129,73 +126,104 @@ def _apply(items: list[_Item], decisions: Decisions) -> tuple[dict[str, ActionRe
             seen_names.add(gap.name)
             for occ_idx in gap.occurrences:
                 if occ_idx != keep_idx:
-                    duplicate_deletions.append((gap.name, occ_idx))
+                    duplicate_dels.append((gap.name, occ_idx))
 
-    # Descending by occ_idx so each deletion leaves earlier occurrences intact.
-    duplicate_deletions.sort(key=lambda p: -p[1])
+    duplicate_dels.sort(key=lambda p: -p[1])
+    return half_sup_names, duplicate_dels
 
-    pyproject = find_pyproject()
-    pending_mutations = bool(half_sup or duplicate_deletions)
-    if pending_mutations and pyproject is not None:
-        bak = snapshot(pyproject)
-        emit_diagnostic(f"wrote {bak.name} (rollback: mv {bak.name} {pyproject.name})")
 
-    deleted_names: set[str] = set()
+def _format_lines(lines_removed: tuple[int, int] | None) -> str:
+    """Format a ``lines_removed`` pair as ``"first-last"`` or ``"?"``."""
+    return f"{lines_removed[0]}-{lines_removed[1]}" if lines_removed else "?"
 
-    if pyproject is not None:
-        for it in half_sup:
-            target_name = it.detection.name
-            result = delete_entry(pyproject, target_name)
-            if result.ok:
-                deleted_names.add(target_name)
-                lines = result.lines_removed
-                lines_str = f"{lines[0]}-{lines[1]}" if lines else "?"
-                emit_diagnostic(
-                    f"wrote {pyproject.name}: removed [[tool.auntiepypi.servers]] entry "
-                    f"{target_name!r} (lines {lines_str})"
-                )
-            else:
-                raise AfiError(
-                    code=EXIT_USER_ERROR,
-                    message=f"refused to delete entry {target_name!r}: {result.reason}",
-                    remediation=(
-                        "the block uses inline-table or multi-line-string syntax that the "
-                        "stdlib edit cannot safely parse; remove the entry manually"
-                    ),
-                )
 
-        for name, which in duplicate_deletions:
-            result = delete_entry(pyproject, name, which=which)
-            if result.ok:
-                deleted_names.add(name)
-                lines = result.lines_removed
-                lines_str = f"{lines[0]}-{lines[1]}" if lines else "?"
-                emit_diagnostic(
-                    f"wrote {pyproject.name}: removed [[tool.auntiepypi.servers]] entry "
-                    f"{name!r} occurrence {which} (lines {lines_str})"
-                )
-            else:
-                raise AfiError(
-                    code=EXIT_USER_ERROR,
-                    message=f"refused to delete entry {name!r} (which={which}): {result.reason}",
-                    remediation=(
-                        "the block uses inline-table or multi-line-string syntax that the "
-                        "stdlib edit cannot safely parse; remove the entry manually"
-                    ),
-                )
+def _execute_deletions(
+    pyproject: Path,
+    half_sup_names: list[str],
+    duplicate_dels: list[tuple[str, int]],
+) -> set[str]:
+    """Execute staged deletions; raises ``AfiError(1)`` on refusal.
 
-    action_results: dict[str, ActionResult] = {}
+    Returns the set of names that were successfully deleted.
+    """
+    deleted: set[str] = set()
+
+    for name in half_sup_names:
+        result = delete_entry(pyproject, name)
+        if not result.ok:
+            raise AfiError(
+                code=EXIT_USER_ERROR,
+                message=f"refused to delete entry {name!r}: {result.reason}",
+                remediation=(
+                    "the block uses inline-table or multi-line-string syntax that the "
+                    "stdlib edit cannot safely parse; remove the entry manually"
+                ),
+            )
+        deleted.add(name)
+        emit_diagnostic(
+            f"wrote {pyproject.name}: removed [[tool.auntiepypi.servers]] entry "
+            f"{name!r} (lines {_format_lines(result.lines_removed)})"
+        )
+
+    for name, which in duplicate_dels:
+        result = delete_entry(pyproject, name, which=which)
+        if not result.ok:
+            raise AfiError(
+                code=EXIT_USER_ERROR,
+                message=f"refused to delete entry {name!r} (which={which}): {result.reason}",
+                remediation=(
+                    "the block uses inline-table or multi-line-string syntax that the "
+                    "stdlib edit cannot safely parse; remove the entry manually"
+                ),
+            )
+        deleted.add(name)
+        emit_diagnostic(
+            f"wrote {pyproject.name}: removed [[tool.auntiepypi.servers]] entry "
+            f"{name!r} occurrence {which} (lines {_format_lines(result.lines_removed)})"
+        )
+
+    return deleted
+
+
+def _dispatch_actionable(items: list[_Item]) -> dict[str, ActionResult]:
+    """Dispatch each actionable item and reflect status on success.
+
+    Returns ``dict[name -> ActionResult]`` for every item dispatched.
+    """
+    results: dict[str, ActionResult] = {}
     for it in items:
         if it.action_class != "actionable" or it.spec is None:
             continue
         result = _actions.dispatch(it.detection, it.spec)
-        action_results[it.detection.name] = result
+        results[it.detection.name] = result
         if result.ok:
             # Strategy's re-probe confirmed the server is now up. Reflect
             # that in the item so JSON status and rendered text match fix_ok=true.
-            it.detection = dataclasses.replace(it.detection, status="up")
+            it.detection = dc_replace(it.detection, status="up")
+    return results
 
-    return action_results, deleted_names
+
+def _apply(items: list[_Item], decisions: Decisions) -> tuple[dict[str, ActionResult], set[str]]:
+    """Run the mutating apply path.
+
+    Returns ``(action_results, deleted_names)`` where ``deleted_names`` is
+    the set of detection names that were *successfully* removed from
+    pyproject.toml. Entries that were refused (inline-table, multi-line
+    string) cause an immediate ``AfiError(code=1)`` rather than a silent
+    skip.
+
+    Order: stage all pending config-mutations → snapshot once → execute
+    deletions → dispatch actionable entries.
+    """
+    half_sup_names, duplicate_dels = _stage_deletions(items, decisions)
+    pyproject = find_pyproject()
+    deleted: set[str] = set()
+    if (half_sup_names or duplicate_dels) and pyproject is not None:
+        bak = snapshot(pyproject)
+        emit_diagnostic(f"wrote {bak.name} (rollback: mv {bak.name} {pyproject.name})")
+        deleted = _execute_deletions(pyproject, half_sup_names, duplicate_dels)
+    action_results = _dispatch_actionable(items)
+    return action_results, deleted
 
 
 def _build_items(detections, specs, gaps, decisions: Decisions) -> list[_Item]:
@@ -293,6 +321,70 @@ def _companion_field(gap: ConfigGap) -> str:
     return "?"
 
 
+def _detection_fields(it: _Item) -> list[dict[str, str]]:
+    """Return the base detection fields for an item."""
+    fields = [
+        {"name": "flavor", "value": it.detection.flavor},
+        {"name": "host", "value": it.detection.host},
+        {"name": "port", "value": str(it.detection.port)},
+        {"name": "url", "value": it.detection.url},
+        {"name": "status", "value": it.detection.status},
+        {"name": "source", "value": it.detection.source},
+    ]
+    if it.spec and it.spec.managed_by:
+        fields.append({"name": "managed_by", "value": it.spec.managed_by})
+    return fields
+
+
+def _gap_fields(gaps: list[ConfigGap]) -> list[dict[str, str]]:
+    """Return config-gap fields (only missing-companion entries are surfaced)."""
+    return [
+        {"name": "config_gap", "value": gap.detail}
+        for gap in gaps
+        if gap.kind == "missing-companion"
+    ]
+
+
+def _action_fields(it: _Item, action_results: dict[str, ActionResult]) -> list[dict[str, str]]:
+    """Return apply-time action fields, or an empty list when not dispatched."""
+    if it.detection.name not in action_results:
+        return []
+    r = action_results[it.detection.name]
+    fields: list[dict[str, str]] = [
+        {"name": "fix_attempted", "value": "true"},
+        {"name": "fix_ok", "value": "true" if r.ok else "false"},
+        {"name": "fix_detail", "value": r.detail},
+    ]
+    if r.log_path:
+        fields.append({"name": "log_path", "value": r.log_path})
+    if r.pid is not None:
+        fields.append({"name": "pid", "value": str(r.pid)})
+    return fields
+
+
+def _section_for_item(
+    it: _Item,
+    action_results: dict[str, ActionResult],
+    deleted_names: set[str],
+    applied: bool,
+) -> dict[str, object]:
+    """Build the payload section dict for a single item."""
+    fields = _detection_fields(it)
+    fields.extend(_gap_fields(it.config_gaps))
+    fields.append({"name": "diagnosis", "value": it.diagnosis})
+    if it.remediation:
+        fields.append({"name": "remediation", "value": it.remediation})
+    fields.extend(_action_fields(it, action_results))
+    if applied and it.detection.name in deleted_names:
+        fields.append({"name": "deleted", "value": "true"})
+    return {
+        "category": "servers",
+        "title": it.detection.name,
+        "light": _light_for(it),
+        "fields": fields,
+    }
+
+
 def _build_payload(
     items: list[_Item],
     applied: bool,
@@ -302,54 +394,12 @@ def _build_payload(
     """Build the output payload; merges apply-time results when provided."""
     action_results = action_results or {}
     deleted_names = deleted_names or set()
-    sections = []
-    for it in items:
-        fields = [
-            {"name": "flavor", "value": it.detection.flavor},
-            {"name": "host", "value": it.detection.host},
-            {"name": "port", "value": str(it.detection.port)},
-            {"name": "url", "value": it.detection.url},
-            {"name": "status", "value": it.detection.status},
-            {"name": "source", "value": it.detection.source},
-        ]
-        if it.spec and it.spec.managed_by:
-            fields.append({"name": "managed_by", "value": it.spec.managed_by})
-        for gap in it.config_gaps:
-            if gap.kind == "missing-companion":
-                fields.append({"name": "config_gap", "value": gap.detail})
-        fields.append({"name": "diagnosis", "value": it.diagnosis})
-        if it.remediation:
-            fields.append({"name": "remediation", "value": it.remediation})
-
-        # Apply-time additions
-        if it.detection.name in action_results:
-            r = action_results[it.detection.name]
-            fields.append({"name": "fix_attempted", "value": "true"})
-            fields.append({"name": "fix_ok", "value": "true" if r.ok else "false"})
-            fields.append({"name": "fix_detail", "value": r.detail})
-            if r.log_path:
-                fields.append({"name": "log_path", "value": r.log_path})
-            if r.pid is not None:
-                fields.append({"name": "pid", "value": str(r.pid)})
-
-        if it.detection.name in deleted_names:
-            fields.append({"name": "deleted", "value": "true"})
-
-        sections.append(
-            {
-                "category": "servers",
-                "title": it.detection.name,
-                "light": _light_for(it),
-                "fields": fields,
-            }
-        )
-
+    sections = [_section_for_item(it, action_results, deleted_names, applied) for it in items]
     by_status: dict[str, int] = {}
     by_class: dict[str, int] = {}
     for it in items:
         by_status[it.detection.status] = by_status.get(it.detection.status, 0) + 1
         by_class[it.action_class] = by_class.get(it.action_class, 0) + 1
-
     return {
         "subject": _SUBJECT,
         "sections": sections,
@@ -374,43 +424,50 @@ def _light_for(item: _Item) -> str:
     return "unknown"
 
 
-def _render_text(payload: dict, items: list[_Item], apply_mode: bool) -> str:
-    lines = [f"# {payload['subject']}"]
-    summary = payload["summary"]
-    by_class = summary["by_action_class"]
+def _summary_line(by_class: dict[str, int], total: int) -> str:
+    """Return the one-line summary string."""
     parts = [
         f"{by_class.get('actionable', 0)} actionable",
         f"{by_class.get('half_supervised', 0)} half-supervised",
         f"{by_class.get('skip', 0)} skip",
         f"{by_class.get('ambiguous', 0)} ambiguous",
     ]
-    lines.append(f"summary: {', '.join(parts)} ({summary['total']} total)")
-    lines.append("")
+    return f"summary: {', '.join(parts)} ({total} total)"
 
+
+def _render_item(it: _Item) -> list[str]:
+    """Return the rendered lines for a single item (no trailing newline)."""
+    det = it.detection
+    managed = it.spec.managed_by if it.spec and it.spec.managed_by else "—"
+    lines = [f"  {det.name:<20}  {det.status:<7}  {det.source:<10}  managed_by={managed}"]
+    for gap in it.config_gaps:
+        if gap.kind == "missing-companion":
+            lines.append(f"      config_gap: {gap.detail}")
+    lines.append(f"      diagnosis: {it.diagnosis}")
+    if it.remediation:
+        if "\n" in it.remediation:
+            lines.append("      remediation:")
+            for r in it.remediation.splitlines():
+                lines.append(f"          {r}")
+        else:
+            lines.append(f"      remediation: {it.remediation}")
+    return lines
+
+
+def _render_text(payload: dict, items: list[_Item], apply_mode: bool) -> str:
+    summary = payload["summary"]
+    by_class = summary["by_action_class"]
+    out = [f"# {payload['subject']}", _summary_line(by_class, summary["total"]), ""]
     for it in items:
-        det = it.detection
-        managed = it.spec.managed_by if it.spec and it.spec.managed_by else "—"
-        lines.append(f"  {det.name:<20}  {det.status:<7}  {det.source:<10}  managed_by={managed}")
-        for gap in it.config_gaps:
-            if gap.kind == "missing-companion":
-                lines.append(f"      config_gap: {gap.detail}")
-        lines.append(f"      diagnosis: {it.diagnosis}")
-        if it.remediation:
-            if "\n" in it.remediation:
-                lines.append("      remediation:")
-                for r in it.remediation.splitlines():
-                    lines.append(f"          {r}")
-            else:
-                lines.append(f"      remediation: {it.remediation}")
-
+        out.extend(_render_item(it))
     actionable_count = by_class.get("actionable", 0) + by_class.get("half_supervised", 0)
-    if not apply_mode and actionable_count:
-        lines.append("")
-        lines.append(f"(dry-run; pass --apply to act on {actionable_count} remediations)")
-    elif not apply_mode:
-        lines.append("")
-        lines.append("(dry-run; nothing to apply)")
-    return "\n".join(lines)
+    if not apply_mode:
+        out.append("")
+        if actionable_count:
+            out.append(f"(dry-run; pass --apply to act on {actionable_count} remediations)")
+        else:
+            out.append("(dry-run; nothing to apply)")
+    return "\n".join(out)
 
 
 def register(sub: argparse._SubParsersAction) -> None:
