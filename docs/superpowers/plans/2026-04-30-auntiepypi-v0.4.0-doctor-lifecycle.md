@@ -3548,7 +3548,8 @@ flavor = "pypiserver"
 port = 9999
 managed_by = "systemd-user"
 EOF
-uv run --project /home/spark/git/auntiepypi auntie doctor --apply
+# Replace <repo-root> with the project's checkout directory on your machine.
+uv run --project <repo-root> auntie doctor --apply
 ls pyproject.toml*.bak
 cat pyproject.toml
 ```
@@ -3558,7 +3559,7 @@ Expected: a `.bak` file is created; the entry is gone from `pyproject.toml`.
 Clean up:
 
 ```bash
-cd /home/spark/git/auntiepypi
+cd <repo-root>
 rm -rf /tmp/auntie-smoketest
 ```
 

@@ -273,10 +273,12 @@ def _classify(
     duplicate = next((g for g in gaps if g.kind == "duplicate"), None)
 
     if duplicate is not None and decisions.for_key("duplicate", det.name) is None:
+        # Build option list from occurrences, e.g. "=1 or =2 or =3" for a 3-way duplicate.
+        options = " or ".join(f"={i + 1}" for i in range(len(duplicate.occurrences)))
         return (
             "ambiguous",
             f"ambiguous: duplicate name {det.name!r}",
-            f"auntie doctor --apply --decide=duplicate:{det.name}=1   # or =2",
+            f"auntie doctor --apply --decide=duplicate:{det.name}{options}",
         )
 
     if half_sup is not None:

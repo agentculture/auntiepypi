@@ -883,3 +883,71 @@ managed_by = "systemd-user"
     payload = json.loads(out)
     field_map = {f["name"]: f["value"] for f in payload["sections"][0]["fields"]}
     assert field_map.get("deleted") == "true"
+
+
+def test_doctor_dry_run_three_way_remediation_lists_all_options(tmp_path, monkeypatch, capsys):
+    """3-way duplicate: remediation text shows '=1 or =2 or =3'."""
+    from auntiepypi._detect._detection import Detection
+
+    monkeypatch.chdir(tmp_path)
+    _write_pyproject(
+        tmp_path,
+        """\
+[[tool.auntiepypi.servers]]
+name = "main"
+flavor = "pypiserver"
+port = 8080
+managed_by = "manual"
+
+[[tool.auntiepypi.servers]]
+name = "main"
+flavor = "devpi"
+port = 3141
+managed_by = "manual"
+
+[[tool.auntiepypi.servers]]
+name = "main"
+flavor = "pypiserver"
+port = 9999
+managed_by = "manual"
+""",
+    )
+    monkeypatch.setattr(
+        "auntiepypi.cli._commands.doctor.detect_all",
+        lambda *a, **kw: [
+            Detection(
+                name="main",
+                flavor="pypiserver",
+                host="127.0.0.1",
+                port=8080,
+                url="http://127.0.0.1:8080/",
+                status="up",
+                source="declared",
+                managed_by="manual",
+            ),
+            Detection(
+                name="main",
+                flavor="devpi",
+                host="127.0.0.1",
+                port=3141,
+                url="http://127.0.0.1:3141/+api",
+                status="up",
+                source="declared",
+                managed_by="manual",
+            ),
+            Detection(
+                name="main",
+                flavor="pypiserver",
+                host="127.0.0.1",
+                port=9999,
+                url="http://127.0.0.1:9999/",
+                status="up",
+                source="declared",
+                managed_by="manual",
+            ),
+        ],
+    )
+    rc = cmd_doctor(_make_args())
+    assert rc == EXIT_SUCCESS
+    out = capsys.readouterr().out
+    assert "--decide=duplicate:main=1 or =2 or =3" in out

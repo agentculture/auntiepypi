@@ -3,8 +3,8 @@
 > auntie (Python distribution: `auntiepypi`) is both a CLI and an agent
 > that maintains, uses, and serves the CLI for managing PyPI packages.
 > It overviews packages on pypi.org, detects PyPI-flavored servers
-> running locally, and can start/stop declared servers — informational
-> first, actionable with `--apply`.
+> running locally, and can start declared servers — informational
+> first, actionable with `--apply`. Stop/restart lands in v0.5.0.
 
 **Status:** v0.4.0 — doctor lifecycle landed. `auntie doctor` is now a
 managed_by-aware lifecycle dispatcher: `--apply` replaces `--fix`,

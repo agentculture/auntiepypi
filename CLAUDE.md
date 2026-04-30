@@ -7,8 +7,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 `auntie doctor` is now a managed_by-aware lifecycle dispatcher. The
 old `--fix` flag is replaced by `--apply`; `_probes/` is deleted and
 doctor consumes `_detect/` directly. A new `_actions/` module provides
-two dispatch strategies: `systemd-user` (starts/stops a systemd user
-unit) and `command` (runs an arbitrary shell command). Before any
+two dispatch strategies: `systemd-user` (starts a systemd user unit;
+stop is v0.5.0 territory) and `command` (runs an arbitrary shell command). Before any
 `pyproject.toml` mutation, a numbered `.bak` snapshot is written
 (`pyproject.toml.1.bak`, `pyproject.toml.2.bak`, …). The `packages`
 noun is permanently removed — use `auntie overview <PKG>` instead.

@@ -54,11 +54,15 @@ summary: 1 actionable, 0 half-supervised, 0 skip, 0 ambiguous (1 total)
 
 $ auntie doctor --apply
 # auntie doctor --apply
-wrote pyproject.toml.1.bak (rollback: mv pyproject.toml.1.bak pyproject.toml)
 dispatching systemd-user: systemctl --user start pypi-server.service
 re-probe main: up
 summary: 0 actionable, 0 half-supervised, 0 skip, 0 ambiguous (1 total)
 ```
+
+Note: `wrote pyproject.toml.1.bak` only appears when `--apply` makes a
+`pyproject.toml` mutation (e.g. deleting a half-supervised entry). A
+pure systemd-user start does not mutate the config file, so no `.bak`
+is written.
 
 If the `unit` field is missing from the declaration, doctor classifies
 the entry as `half-supervised` and `--apply` will remove it from
