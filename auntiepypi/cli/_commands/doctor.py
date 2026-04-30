@@ -12,7 +12,8 @@ T12 scope: --apply path — dispatch actionable, delete half-supervised, exit 2 
 from __future__ import annotations
 
 import argparse
-from dataclasses import dataclass, replace as dc_replace
+from dataclasses import dataclass
+from dataclasses import replace as dc_replace
 from pathlib import Path
 
 from auntiepypi import _actions

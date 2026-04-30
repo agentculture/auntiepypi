@@ -67,8 +67,13 @@ def test_pypistats_response_has_required_shape(pkg):
 
 
 @pytest.mark.live
-def test_packages_overview_against_real_api(monkeypatch, tmp_path, capsys):
-    """End-to-end: run the CLI verb against live APIs."""
+def test_overview_package_drilldown_against_real_api(monkeypatch, tmp_path, capsys):
+    """End-to-end: run the v0.4.0 CLI verb (`auntie overview <pkg>`) against live APIs.
+
+    The `packages` noun was removed in v0.4.0; package drill-down is now
+    reached via TARGET resolution path 3 ("configured package") on the
+    top-level `overview` verb.
+    """
     import json
 
     from auntiepypi.cli import main
@@ -77,7 +82,7 @@ def test_packages_overview_against_real_api(monkeypatch, tmp_path, capsys):
     monkeypatch.chdir(tmp_path)
 
     try:
-        rc = main(["packages", "overview", "--json"])
+        rc = main(["overview", "requests", "--json"])
     except FetchError as err:  # pragma: no cover
         pytest.skip(f"upstream {err.reason}")
 
@@ -86,8 +91,7 @@ def test_packages_overview_against_real_api(monkeypatch, tmp_path, capsys):
     assert rc == 0
 
     payload = json.loads(capsys.readouterr().out)
-    assert payload["subject"] == "packages"
-    assert len(payload["sections"]) == 1
-    section = payload["sections"][0]
-    assert section["title"] == "requests"
-    assert section["light"] in {"green", "yellow", "red", "unknown"}
+    sections = payload["sections"]
+    pkg_sections = [s for s in sections if s.get("title") == "requests"]
+    assert len(pkg_sections) == 1
+    assert pkg_sections[0]["light"] in {"green", "yellow", "red", "unknown"}
