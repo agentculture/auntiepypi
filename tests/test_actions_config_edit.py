@@ -160,3 +160,33 @@ port = 8080
     result = delete_entry(p, "main", which=5)
     assert result.ok is False
     assert "no occurrence" in result.reason.lower() or "out of range" in result.reason.lower()
+
+
+def test_delete_entry_refuses_non_pyproject_path(tmp_path):
+    """Defensive: refuse to operate on files not named pyproject.toml."""
+    p = tmp_path / "not-pyproject.toml"
+    p.write_text("hello\n")
+    with pytest.raises(AfiError) as excinfo:
+        delete_entry(p, "main")
+    assert excinfo.value.code == 1
+    assert "non-pyproject.toml" in excinfo.value.message
+
+
+def test_delete_entry_refuses_directory(tmp_path):
+    """Defensive: refuse if the path resolves to a non-regular file."""
+    d = tmp_path / "pyproject.toml"
+    d.mkdir()
+    with pytest.raises(AfiError) as excinfo:
+        delete_entry(d, "main")
+    assert excinfo.value.code == 1
+    assert "non-regular file" in excinfo.value.message
+
+
+def test_snapshot_refuses_non_pyproject_path(tmp_path):
+    """Defensive: snapshot validates the input is a real pyproject.toml file."""
+    p = tmp_path / "not-pyproject.toml"
+    p.write_text("hello\n")
+    with pytest.raises(AfiError) as excinfo:
+        snapshot(p)
+    assert excinfo.value.code == 1
+    assert "non-pyproject.toml" in excinfo.value.message

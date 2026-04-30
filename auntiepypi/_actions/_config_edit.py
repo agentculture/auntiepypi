@@ -40,6 +40,32 @@ class DeleteResult:
     lines_removed: tuple[int, int] | None = None
 
 
+def _validate_pyproject_path(pyproject: Path) -> Path:
+    """Defensive: ensure the path is a regular file named ``pyproject.toml``.
+
+    Returns the resolved path. Raises ``AfiError(code=1)`` otherwise.
+
+    ``find_pyproject()`` already returns only legitimate pyproject.toml paths
+    via a CWD walk-up, so this is defense-in-depth: it makes the contract
+    explicit and prevents accidental writes to arbitrary files if a future
+    caller invokes these functions with an unvetted Path.
+    """
+    target = pyproject.resolve()
+    if target.name != "pyproject.toml":
+        raise AfiError(
+            code=EXIT_USER_ERROR,
+            message=f"refusing to operate on non-pyproject.toml file: {pyproject!r}",
+            remediation="this is a defensive guard; report a bug if seen in normal use",
+        )
+    if not target.is_file():
+        raise AfiError(
+            code=EXIT_USER_ERROR,
+            message=f"refusing to operate on non-regular file: {pyproject!r}",
+            remediation="this is a defensive guard; report a bug if seen in normal use",
+        )
+    return target
+
+
 def delete_entry(pyproject: Path, name: str, *, which: int = 0) -> DeleteResult:
     """Remove the [[tool.auntiepypi.servers]] block whose entry has the given `name`.
 
@@ -50,6 +76,7 @@ def delete_entry(pyproject: Path, name: str, *, which: int = 0) -> DeleteResult:
     Refuses to delete inline-table forms or blocks containing multi-line
     strings. On success, writes the file in place.
     """
+    pyproject = _validate_pyproject_path(pyproject)
     text = pyproject.read_text()
     lines = text.splitlines(keepends=True)
 
@@ -140,6 +167,7 @@ def snapshot(pyproject: Path) -> Path:
 
     Raises ``AfiError`` (code 1) on exhaustion after retries.
     """
+    pyproject = _validate_pyproject_path(pyproject)
     parent = pyproject.parent
     stem = pyproject.name
     pattern = re.compile(rf"^{re.escape(stem)}\.(\d+)\.bak$")
