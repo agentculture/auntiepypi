@@ -5,7 +5,8 @@ groups detections into action classes (``actionable``,
 ``half_supervised``, ``ambiguous``, ``skip``), and emits a structured
 payload with per-entry ``diagnosis`` and ``remediation``.
 
-T11 scope: detection wiring + diagnosis (no --apply action; that's T12).
+T11 scope: detection wiring + diagnosis.
+T12 scope: --apply path — dispatch actionable, delete half-supervised, exit 2 on failure.
 """
 
 from __future__ import annotations
@@ -14,6 +15,7 @@ import argparse
 from dataclasses import dataclass
 
 from auntiepypi import _actions
+from auntiepypi._actions._action import ActionResult
 from auntiepypi._detect import detect_all
 from auntiepypi._detect._config import (
     ConfigGap,
@@ -22,8 +24,12 @@ from auntiepypi._detect._config import (
 )
 from auntiepypi._detect._detection import Detection
 from auntiepypi.cli._commands._decide import Decisions, parse_decisions
-from auntiepypi.cli._errors import EXIT_SUCCESS
+from auntiepypi.cli._errors import EXIT_ENV_ERROR, EXIT_SUCCESS, AfiError
 from auntiepypi.cli._output import emit_diagnostic, emit_result
+
+# NOTE: _config_edit and _packages_config are imported lazily inside _apply()
+# to avoid a circular import:
+#   _config_edit → auntiepypi.cli._errors → auntiepypi.cli → doctor → _config_edit
 
 _SUBJECT = "auntie doctor"
 
@@ -57,13 +63,95 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     apply_mode = bool(getattr(args, "apply", False))
     json_mode = bool(getattr(args, "json", False))
 
-    payload = _build_payload(items, applied=apply_mode)
+    action_results: dict[str, ActionResult] = {}
+    if apply_mode:
+        action_results = _apply(items, decisions)
+
+    payload = _build_payload(items, applied=apply_mode, action_results=action_results)
 
     if json_mode:
         emit_result(payload, json_mode=True)
     else:
         emit_result(_render_text(payload, items, apply_mode), json_mode=False)
+
+    if apply_mode:
+        bad = [
+            it.detection.name
+            for it in items
+            if it.action_class == "actionable"
+            and not action_results.get(it.detection.name, ActionResult(ok=True, detail="")).ok
+        ]
+        if bad:
+            emit_diagnostic(f"doctor: --apply did not bring every actionable server up: {bad}")
+            raise AfiError(
+                code=EXIT_ENV_ERROR,
+                message="doctor: --apply did not bring every actionable server up",
+                remediation="inspect the JSON payload's fix_detail field for each failing entry",
+            )
+
     return EXIT_SUCCESS
+
+
+def _apply(items: list[_Item], decisions: Decisions) -> dict[str, ActionResult]:
+    """Run the mutating apply path. Returns action_results keyed by detection.name.
+
+    Order: stage all pending config-mutations → snapshot once → execute deletions
+    → dispatch actionable entries.
+    """
+    # Lazy imports break the circular dependency:
+    # _config_edit → auntiepypi.cli._errors → auntiepypi.cli → doctor → _config_edit
+    from auntiepypi._actions._config_edit import delete_entry, snapshot
+    from auntiepypi._packages_config import find_pyproject
+
+    half_sup = [it for it in items if it.action_class == "half_supervised"]
+    decided_duplicates: list[_Item] = []
+    for it in items:
+        if it.action_class != "ambiguous":
+            continue
+        for gap in it.config_gaps:
+            if gap.kind != "duplicate":
+                continue
+            chosen = decisions.for_key("duplicate", gap.name)
+            if chosen is None:
+                continue
+            try:
+                keep_idx = int(chosen) - 1
+            except ValueError:
+                continue
+            duplicates_with_name = [
+                x for x in items if x.spec is not None and x.spec.name == gap.name
+            ]
+            for idx, dup in enumerate(duplicates_with_name):
+                if idx != keep_idx and dup not in decided_duplicates:
+                    decided_duplicates.append(dup)
+
+    pyproject = find_pyproject()
+    pending_mutations = bool(half_sup or decided_duplicates)
+    if pending_mutations and pyproject is not None:
+        bak = snapshot(pyproject)
+        emit_diagnostic(f"wrote {bak.name} (rollback: mv {bak.name} {pyproject.name})")
+
+    if pyproject is not None:
+        for it in half_sup + decided_duplicates:
+            result = delete_entry(pyproject, it.detection.name)
+            if result.ok:
+                lines = result.lines_removed
+                lines_str = f"{lines[0]}-{lines[1]}" if lines else "?"
+                emit_diagnostic(
+                    f"wrote {pyproject.name}: removed [[tool.auntiepypi.servers]] entry "
+                    f"{it.detection.name!r} (lines {lines_str})"
+                )
+            else:
+                emit_diagnostic(f"could not auto-delete {it.detection.name!r}: {result.reason}")
+
+    action_results: dict[str, ActionResult] = {}
+    for it in items:
+        if it.action_class != "actionable" or it.spec is None:
+            continue
+        result = _actions.dispatch(it.detection, it.spec)
+        action_results[it.detection.name] = result
+
+    return action_results
 
 
 def _build_items(detections, specs, gaps, decisions: Decisions) -> list[_Item]:
@@ -151,8 +239,13 @@ def _companion_field(gap: ConfigGap) -> str:
     return "?"
 
 
-def _build_payload(items: list[_Item], applied: bool) -> dict[str, object]:
-    """T11: minimal payload — extends in T12/T14."""
+def _build_payload(
+    items: list[_Item],
+    applied: bool,
+    action_results: dict[str, ActionResult] | None = None,
+) -> dict[str, object]:
+    """Build the output payload; merges apply-time results when provided."""
+    action_results = action_results or {}
     sections = []
     for it in items:
         fields = [
@@ -171,6 +264,20 @@ def _build_payload(items: list[_Item], applied: bool) -> dict[str, object]:
         fields.append({"name": "diagnosis", "value": it.diagnosis})
         if it.remediation:
             fields.append({"name": "remediation", "value": it.remediation})
+
+        # Apply-time additions
+        if it.detection.name in action_results:
+            r = action_results[it.detection.name]
+            fields.append({"name": "fix_attempted", "value": "true"})
+            fields.append({"name": "fix_ok", "value": "true" if r.ok else "false"})
+            fields.append({"name": "fix_detail", "value": r.detail})
+            if r.log_path:
+                fields.append({"name": "log_path", "value": r.log_path})
+            if r.pid is not None:
+                fields.append({"name": "pid", "value": str(r.pid)})
+
+        if applied and it.action_class == "half_supervised":
+            fields.append({"name": "deleted", "value": "true"})
 
         sections.append(
             {
