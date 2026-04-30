@@ -51,6 +51,92 @@ def _no_servers_anywhere(monkeypatch):
     )
 
 
+def _setup_stale_systemd_user(tmp_path: Path, monkeypatch) -> Path:
+    """Write a stale half-supervised pyproject.toml and patch detect_all to match.
+
+    Returns the pyproject Path so callers can inspect mutations.
+    """
+    from auntiepypi._detect._detection import Detection
+
+    p = _write_pyproject(
+        tmp_path,
+        """\
+[[tool.auntiepypi.servers]]
+name = "stale"
+flavor = "devpi"
+port = 3141
+managed_by = "systemd-user"
+""",
+    )
+    monkeypatch.setattr(
+        "auntiepypi.cli._commands.doctor.detect_all",
+        lambda *a, **kw: [
+            Detection(
+                name="stale",
+                flavor="devpi",
+                host="127.0.0.1",
+                port=3141,
+                url="http://127.0.0.1:3141/+api",
+                status="down",
+                source="declared",
+                managed_by="systemd-user",
+            )
+        ],
+    )
+    return p
+
+
+def _setup_main_duplicates(tmp_path: Path, monkeypatch, ports: list) -> Path:
+    """Write a pyproject.toml with len(ports) 'main' server entries and patch detect_all.
+
+    Flavors alternate pypiserver / devpi per entry index (0-based):
+      index 0 → pypiserver, 1 → devpi, 2 → pypiserver, …
+
+    URL pattern: devpi → http://127.0.0.1:{port}/+api
+                 pypiserver → http://127.0.0.1:{port}/
+
+    Returns the pyproject Path so callers can inspect mutations.
+    """
+    from auntiepypi._detect._detection import Detection
+
+    _flavors = ["pypiserver", "devpi"]
+
+    blocks = []
+    for i, port in enumerate(ports):
+        flavor = _flavors[i % 2]
+        blocks.append(f"""\
+[[tool.auntiepypi.servers]]
+name = "main"
+flavor = "{flavor}"
+port = {port}
+managed_by = "manual"
+""")
+    p = _write_pyproject(tmp_path, "\n".join(blocks))
+
+    detections = []
+    for i, port in enumerate(ports):
+        flavor = _flavors[i % 2]
+        url = f"http://127.0.0.1:{port}/+api" if flavor == "devpi" else f"http://127.0.0.1:{port}/"
+        detections.append(
+            Detection(
+                name="main",
+                flavor=flavor,
+                host="127.0.0.1",
+                port=port,
+                url=url,
+                status="up",
+                source="declared",
+                managed_by="manual",
+            )
+        )
+
+    monkeypatch.setattr(
+        "auntiepypi.cli._commands.doctor.detect_all",
+        lambda *a, **kw: detections,
+    )
+    return p
+
+
 def test_doctor_dry_run_with_no_servers(tmp_path, monkeypatch, capsys):
     monkeypatch.chdir(tmp_path)
     _no_servers_anywhere(monkeypatch)
@@ -104,34 +190,8 @@ command = ["echo", "hi"]
 
 def test_doctor_dry_run_half_supervised(tmp_path, monkeypatch, capsys):
     """A spec with managed_by=systemd-user and no `unit` is half-supervised."""
-    from auntiepypi._detect._detection import Detection
-
     monkeypatch.chdir(tmp_path)
-    _write_pyproject(
-        tmp_path,
-        """\
-[[tool.auntiepypi.servers]]
-name = "stale"
-flavor = "devpi"
-port = 3141
-managed_by = "systemd-user"
-""",
-    )
-    monkeypatch.setattr(
-        "auntiepypi.cli._commands.doctor.detect_all",
-        lambda *a, **kw: [
-            Detection(
-                name="stale",
-                flavor="devpi",
-                host="127.0.0.1",
-                port=3141,
-                url="http://127.0.0.1:3141/+api",
-                status="down",
-                source="declared",
-                managed_by="systemd-user",
-            )
-        ],
-    )
+    _setup_stale_systemd_user(tmp_path, monkeypatch)
     rc = cmd_doctor(_make_args())
     assert rc == EXIT_SUCCESS
     out = capsys.readouterr().out
@@ -317,34 +377,8 @@ command = ["false"]
 
 
 def test_doctor_apply_deletes_half_supervised(tmp_path, monkeypatch, capsys):
-    from auntiepypi._detect._detection import Detection
-
     monkeypatch.chdir(tmp_path)
-    p = _write_pyproject(
-        tmp_path,
-        """\
-[[tool.auntiepypi.servers]]
-name = "stale"
-flavor = "devpi"
-port = 3141
-managed_by = "systemd-user"
-""",
-    )
-    monkeypatch.setattr(
-        "auntiepypi.cli._commands.doctor.detect_all",
-        lambda *a, **kw: [
-            Detection(
-                name="stale",
-                flavor="devpi",
-                host="127.0.0.1",
-                port=3141,
-                url="http://127.0.0.1:3141/+api",
-                status="down",
-                source="declared",
-                managed_by="systemd-user",
-            )
-        ],
-    )
+    p = _setup_stale_systemd_user(tmp_path, monkeypatch)
     rc = cmd_doctor(_make_args(apply=True))
     assert rc == EXIT_SUCCESS
     text = p.read_text()
@@ -436,50 +470,8 @@ dockerfile = "./Dockerfile"
 
 
 def test_doctor_dry_run_shows_decide_instructions_for_duplicate(tmp_path, monkeypatch, capsys):
-    from auntiepypi._detect._detection import Detection
-
     monkeypatch.chdir(tmp_path)
-    _write_pyproject(
-        tmp_path,
-        """\
-[[tool.auntiepypi.servers]]
-name = "main"
-flavor = "pypiserver"
-port = 8080
-managed_by = "manual"
-
-[[tool.auntiepypi.servers]]
-name = "main"
-flavor = "devpi"
-port = 3141
-managed_by = "manual"
-""",
-    )
-    monkeypatch.setattr(
-        "auntiepypi.cli._commands.doctor.detect_all",
-        lambda *a, **kw: [
-            Detection(
-                name="main",
-                flavor="pypiserver",
-                host="127.0.0.1",
-                port=8080,
-                url="http://127.0.0.1:8080/",
-                status="up",
-                source="declared",
-                managed_by="manual",
-            ),
-            Detection(
-                name="main",
-                flavor="devpi",
-                host="127.0.0.1",
-                port=3141,
-                url="http://127.0.0.1:3141/+api",
-                status="up",
-                source="declared",
-                managed_by="manual",
-            ),
-        ],
-    )
+    _setup_main_duplicates(tmp_path, monkeypatch, [8080, 3141])
     rc = cmd_doctor(_make_args())
     assert rc == EXIT_SUCCESS
     out = capsys.readouterr().out
@@ -488,50 +480,8 @@ managed_by = "manual"
 
 
 def test_doctor_apply_with_decide_deletes_non_kept_duplicate(tmp_path, monkeypatch, capsys):
-    from auntiepypi._detect._detection import Detection
-
     monkeypatch.chdir(tmp_path)
-    p = _write_pyproject(
-        tmp_path,
-        """\
-[[tool.auntiepypi.servers]]
-name = "main"
-flavor = "pypiserver"
-port = 8080
-managed_by = "manual"
-
-[[tool.auntiepypi.servers]]
-name = "main"
-flavor = "devpi"
-port = 3141
-managed_by = "manual"
-""",
-    )
-    monkeypatch.setattr(
-        "auntiepypi.cli._commands.doctor.detect_all",
-        lambda *a, **kw: [
-            Detection(
-                name="main",
-                flavor="pypiserver",
-                host="127.0.0.1",
-                port=8080,
-                url="http://127.0.0.1:8080/",
-                status="up",
-                source="declared",
-                managed_by="manual",
-            ),
-            Detection(
-                name="main",
-                flavor="devpi",
-                host="127.0.0.1",
-                port=3141,
-                url="http://127.0.0.1:3141/+api",
-                status="up",
-                source="declared",
-                managed_by="manual",
-            ),
-        ],
-    )
+    p = _setup_main_duplicates(tmp_path, monkeypatch, [8080, 3141])
     rc = cmd_doctor(_make_args(apply=True, decide=["duplicate:main=1"]))
     assert rc == EXIT_SUCCESS
     text = p.read_text()
@@ -542,66 +492,8 @@ managed_by = "manual"
 
 def test_doctor_apply_three_way_duplicate_with_decide_keep_middle(tmp_path, monkeypatch):
     """3-way duplicate, --decide=duplicate:main=2 keeps the middle entry."""
-    from auntiepypi._detect._detection import Detection
-
     monkeypatch.chdir(tmp_path)
-    p = _write_pyproject(
-        tmp_path,
-        """\
-[[tool.auntiepypi.servers]]
-name = "main"
-flavor = "pypiserver"
-port = 8080
-managed_by = "manual"
-
-[[tool.auntiepypi.servers]]
-name = "main"
-flavor = "devpi"
-port = 3141
-managed_by = "manual"
-
-[[tool.auntiepypi.servers]]
-name = "main"
-flavor = "pypiserver"
-port = 9999
-managed_by = "manual"
-""",
-    )
-    monkeypatch.setattr(
-        "auntiepypi.cli._commands.doctor.detect_all",
-        lambda *a, **kw: [
-            Detection(
-                name="main",
-                flavor="pypiserver",
-                host="127.0.0.1",
-                port=8080,
-                url="http://127.0.0.1:8080/",
-                status="up",
-                source="declared",
-                managed_by="manual",
-            ),
-            Detection(
-                name="main",
-                flavor="devpi",
-                host="127.0.0.1",
-                port=3141,
-                url="http://127.0.0.1:3141/+api",
-                status="up",
-                source="declared",
-                managed_by="manual",
-            ),
-            Detection(
-                name="main",
-                flavor="pypiserver",
-                host="127.0.0.1",
-                port=9999,
-                url="http://127.0.0.1:9999/",
-                status="up",
-                source="declared",
-                managed_by="manual",
-            ),
-        ],
-    )
+    p = _setup_main_duplicates(tmp_path, monkeypatch, [8080, 3141, 9999])
     rc = cmd_doctor(_make_args(apply=True, decide=["duplicate:main=2"]))
     assert rc == EXIT_SUCCESS
     text = p.read_text()
@@ -721,34 +613,9 @@ command = ["echo", "hi"]
 def test_doctor_apply_aborts_on_refused_delete(tmp_path, monkeypatch):
     """When delete_entry refuses (ok=False), --apply aborts with exit 1."""
     from auntiepypi._actions._config_edit import DeleteResult
-    from auntiepypi._detect._detection import Detection
 
     monkeypatch.chdir(tmp_path)
-    _write_pyproject(
-        tmp_path,
-        """\
-[[tool.auntiepypi.servers]]
-name = "stale"
-flavor = "devpi"
-port = 3141
-managed_by = "systemd-user"
-""",
-    )
-    monkeypatch.setattr(
-        "auntiepypi.cli._commands.doctor.detect_all",
-        lambda *a, **kw: [
-            Detection(
-                name="stale",
-                flavor="devpi",
-                host="127.0.0.1",
-                port=3141,
-                url="http://127.0.0.1:3141/+api",
-                status="down",
-                source="declared",
-                managed_by="systemd-user",
-            )
-        ],
-    )
+    _setup_stale_systemd_user(tmp_path, monkeypatch)
     # Simulate delete_entry returning ok=False (e.g. inline-table refusal)
     monkeypatch.setattr(
         "auntiepypi.cli._commands.doctor.delete_entry",
@@ -767,34 +634,8 @@ managed_by = "systemd-user"
 
 def test_doctor_apply_only_marks_successful_deletions(tmp_path, monkeypatch, capsys):
     """The `deleted=true` JSON field must only appear for actually-deleted entries."""
-    from auntiepypi._detect._detection import Detection
-
     monkeypatch.chdir(tmp_path)
-    p = _write_pyproject(
-        tmp_path,
-        """\
-[[tool.auntiepypi.servers]]
-name = "stale"
-flavor = "devpi"
-port = 3141
-managed_by = "systemd-user"
-""",
-    )
-    monkeypatch.setattr(
-        "auntiepypi.cli._commands.doctor.detect_all",
-        lambda *a, **kw: [
-            Detection(
-                name="stale",
-                flavor="devpi",
-                host="127.0.0.1",
-                port=3141,
-                url="http://127.0.0.1:3141/+api",
-                status="down",
-                source="declared",
-                managed_by="systemd-user",
-            )
-        ],
-    )
+    p = _setup_stale_systemd_user(tmp_path, monkeypatch)
     cmd_doctor(_make_args(apply=True, json=True))
     out = capsys.readouterr().out
     payload = json.loads(out)
@@ -850,34 +691,8 @@ command = ["echo", "hi"]
 
 
 def test_doctor_json_half_supervised_marks_deleted_on_apply(tmp_path, monkeypatch, capsys):
-    from auntiepypi._detect._detection import Detection
-
     monkeypatch.chdir(tmp_path)
-    _write_pyproject(
-        tmp_path,
-        """\
-[[tool.auntiepypi.servers]]
-name = "stale"
-flavor = "devpi"
-port = 3141
-managed_by = "systemd-user"
-""",
-    )
-    monkeypatch.setattr(
-        "auntiepypi.cli._commands.doctor.detect_all",
-        lambda *a, **kw: [
-            Detection(
-                name="stale",
-                flavor="devpi",
-                host="127.0.0.1",
-                port=3141,
-                url="http://127.0.0.1:3141/+api",
-                status="down",
-                source="declared",
-                managed_by="systemd-user",
-            )
-        ],
-    )
+    _setup_stale_systemd_user(tmp_path, monkeypatch)
     cmd_doctor(_make_args(apply=True, json=True))
     out = capsys.readouterr().out
     payload = json.loads(out)
@@ -887,66 +702,8 @@ managed_by = "systemd-user"
 
 def test_doctor_dry_run_three_way_remediation_lists_all_options(tmp_path, monkeypatch, capsys):
     """3-way duplicate: remediation text shows '=1 or =2 or =3'."""
-    from auntiepypi._detect._detection import Detection
-
     monkeypatch.chdir(tmp_path)
-    _write_pyproject(
-        tmp_path,
-        """\
-[[tool.auntiepypi.servers]]
-name = "main"
-flavor = "pypiserver"
-port = 8080
-managed_by = "manual"
-
-[[tool.auntiepypi.servers]]
-name = "main"
-flavor = "devpi"
-port = 3141
-managed_by = "manual"
-
-[[tool.auntiepypi.servers]]
-name = "main"
-flavor = "pypiserver"
-port = 9999
-managed_by = "manual"
-""",
-    )
-    monkeypatch.setattr(
-        "auntiepypi.cli._commands.doctor.detect_all",
-        lambda *a, **kw: [
-            Detection(
-                name="main",
-                flavor="pypiserver",
-                host="127.0.0.1",
-                port=8080,
-                url="http://127.0.0.1:8080/",
-                status="up",
-                source="declared",
-                managed_by="manual",
-            ),
-            Detection(
-                name="main",
-                flavor="devpi",
-                host="127.0.0.1",
-                port=3141,
-                url="http://127.0.0.1:3141/+api",
-                status="up",
-                source="declared",
-                managed_by="manual",
-            ),
-            Detection(
-                name="main",
-                flavor="pypiserver",
-                host="127.0.0.1",
-                port=9999,
-                url="http://127.0.0.1:9999/",
-                status="up",
-                source="declared",
-                managed_by="manual",
-            ),
-        ],
-    )
+    _setup_main_duplicates(tmp_path, monkeypatch, [8080, 3141, 9999])
     rc = cmd_doctor(_make_args())
     assert rc == EXIT_SUCCESS
     out = capsys.readouterr().out
