@@ -46,10 +46,11 @@ def apply(detection: Detection, declaration: ServerSpec) -> ActionResult:
     if completed.returncode != 0:
         first_line = (completed.stderr or completed.stdout or "").strip().splitlines()
         snippet = first_line[0] if first_line else ""
-        return ActionResult(
-            ok=False,
-            detail=f"systemctl exit {completed.returncode}: {snippet}".rstrip(": "),
-        )
+        if snippet:
+            detail = f"systemctl exit {completed.returncode}: {snippet}"
+        else:
+            detail = f"systemctl exit {completed.returncode}"
+        return ActionResult(ok=False, detail=detail)
 
     result = probe(detection)
     if result.status == "up":

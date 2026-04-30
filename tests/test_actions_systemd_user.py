@@ -119,3 +119,25 @@ def test_systemd_user_missing_unit(monkeypatch):
     result = systemd_user.apply(_det(), _spec(unit=None))
     assert result.ok is False
     assert "unit" in result.detail
+
+
+def test_systemd_user_oserror_catch_all(monkeypatch):
+    """The (OSError, SubprocessError) catch-all maps to a generic detail with the type name."""
+    runner = _FakeRunner(raise_=PermissionError("systemctl"))
+    monkeypatch.setattr(systemd_user, "RUN", runner)
+
+    result = systemd_user.apply(_det(), _spec())
+    assert result.ok is False
+    assert "PermissionError" in result.detail
+
+
+def test_systemd_user_nonzero_with_empty_stderr(monkeypatch):
+    """Empty stderr/stdout produces detail without trailing ': '."""
+    runner = _FakeRunner(returncode=3, stderr="", stdout="")
+    monkeypatch.setattr(systemd_user, "RUN", runner)
+
+    result = systemd_user.apply(_det(), _spec())
+    assert result.ok is False
+    assert result.detail == "systemctl exit 3"  # no trailing colon, no trailing space
+    assert not result.detail.endswith(":")
+    assert not result.detail.endswith(" ")
