@@ -21,7 +21,6 @@ from auntiepypi.cli._commands import explain as _explain_cmd
 from auntiepypi.cli._commands import learn as _learn_cmd
 from auntiepypi.cli._commands import overview as _overview_cmd
 from auntiepypi.cli._commands import whoami as _whoami_cmd
-from auntiepypi.cli._commands._packages import overview as _packages_overview_cmd
 from auntiepypi.cli._errors import EXIT_USER_ERROR, AfiError
 from auntiepypi.cli._output import emit_error
 
@@ -57,7 +56,6 @@ def _build_parser() -> argparse.ArgumentParser:
     _overview_cmd.register(sub)
     _doctor_cmd.register(sub)
     _whoami_cmd.register(sub)
-    _packages_overview_cmd.register(sub)
 
     return parser
 

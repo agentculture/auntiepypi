@@ -18,7 +18,7 @@ import configparser
 import os
 from pathlib import Path
 
-from auntiepypi._probes import PROBES, probe_status
+from auntiepypi._detect import ServerConfigError, ServersConfig, detect_all, load_servers
 from auntiepypi.cli._output import emit_result
 
 _SUBJECT = "auntiepypi whoami"
@@ -93,9 +93,19 @@ def _effective_default(idx: dict[str, dict[str, object]]) -> str:
     )
 
 
+def _load_servers_silent() -> ServersConfig:
+    """Load server config, falling back to empty config on any error."""
+    try:
+        return load_servers()
+    except ServerConfigError:
+        return ServersConfig(servers=[], scan_processes=False)
+
+
 def _local_indexes_seen() -> list[dict[str, object]]:
     """Cross-reference: which configured local PyPI servers are *also* up right now?"""
-    return [dict(probe_status(p)) for p in PROBES]
+    cfg = _load_servers_silent()
+    detections = detect_all(cfg)
+    return [d.to_section() for d in detections]
 
 
 def _build_payload() -> dict[str, object]:

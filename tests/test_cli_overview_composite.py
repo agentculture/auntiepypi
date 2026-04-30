@@ -31,7 +31,7 @@ def _good_pypi(name="x"):
 
 @pytest.fixture
 def composite_env(tmp_path, monkeypatch):
-    target = "auntiepypi.cli._commands._packages.overview"
+    target = "auntiepypi._packages_view"
     monkeypatch.setattr(f"{target}.fetch_pypi", lambda pkg: _good_pypi(pkg))
     monkeypatch.setattr(f"{target}.fetch_pypistats", lambda pkg: {"data": {"last_week": 100}})
     (tmp_path / "pyproject.toml").write_text('[tool.auntiepypi]\npackages = ["alpha"]\n')
