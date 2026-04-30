@@ -72,13 +72,13 @@ def test_stop_clean_path_sigterm(tmp_path, monkeypatch, fake_kill):
     _pid.write("lc", pid=12345, argv=["pypi-server", "run"], port=8080)
     # _pid.read calls os.kill(pid, 0) for liveness; pretend it's alive
     monkeypatch.setattr("auntiepypi._actions._pid._is_alive", lambda pid: True)
-    _patch_probe(monkeypatch, ["down"])
+    _patch_probe(monkeypatch, ["absent"])
 
     result = command.stop(_detection(8080), _spec(8080))
     assert result.ok is True
     assert "stopped (SIGTERM)" in result.detail
     assert fake_kill == [(12345, signal.SIGTERM)]
-    assert _pid.read("lc") is None  # PID file cleared
+    assert _pid.read("lc", 8080) is None  # PID file cleared
 
 
 def test_stop_sigkill_escalation(tmp_path, monkeypatch, fake_kill):
@@ -87,7 +87,7 @@ def test_stop_sigkill_escalation(tmp_path, monkeypatch, fake_kill):
     _pid.write("lc", pid=12345, argv=["pypi-server", "run"], port=8080)
     monkeypatch.setattr("auntiepypi._actions._pid._is_alive", lambda pid: True)
     # First probe (SIGTERM grace): still up. Second probe (post-SIGKILL): down.
-    _patch_probe(monkeypatch, ["up", "down"])
+    _patch_probe(monkeypatch, ["up", "absent"])
 
     result = command.stop(_detection(8080), _spec(8080))
     assert result.ok is True
@@ -99,7 +99,7 @@ def test_stop_already_stopped_no_pid_no_listener(tmp_path, monkeypatch, fake_kil
     """No PID file, port-walk returns nothing, port is down → idempotent success."""
     monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path))
     monkeypatch.setattr(_pid, "find_by_port", lambda *a, **kw: None)
-    _patch_probe(monkeypatch, ["down"])  # port already down
+    _patch_probe(monkeypatch, ["absent"])  # port already down
 
     result = command.stop(_detection(8080), _spec(8080))
     assert result.ok is True
@@ -125,7 +125,7 @@ def test_stop_port_walk_finds_pid_when_no_pid_file(tmp_path, monkeypatch, fake_k
     """No PID file, port-walk returns a PID → kill it."""
     monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path))
     monkeypatch.setattr(_pid, "find_by_port", lambda *a, **kw: 9876)
-    _patch_probe(monkeypatch, ["down"])
+    _patch_probe(monkeypatch, ["absent"])
 
     result = command.stop(_detection(8080), _spec(8080))
     assert result.ok is True
@@ -140,7 +140,7 @@ def test_stop_stale_pid_then_no_listener_is_already_stopped(tmp_path, monkeypatc
     _pid.write("lc", pid=2_000_000_000, argv=["x"], port=8080)
     monkeypatch.setattr("auntiepypi._actions._pid._is_alive", lambda pid: False)
     monkeypatch.setattr(_pid, "find_by_port", lambda *a, **kw: None)
-    _patch_probe(monkeypatch, ["down"])
+    _patch_probe(monkeypatch, ["absent"])
 
     result = command.stop(_detection(8080), _spec(8080))
     assert result.ok is True
@@ -201,7 +201,7 @@ def test_restart_clean(tmp_path, monkeypatch, fake_kill):
     monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path))
     _pid.write("lc", pid=12345, argv=["pypi-server", "run"], port=8080)
     monkeypatch.setattr("auntiepypi._actions._pid._is_alive", lambda pid: True)
-    _patch_probe(monkeypatch, ["down"])  # stop's reprobe sees down
+    _patch_probe(monkeypatch, ["absent"])  # stop's reprobe sees down
 
     # Stub command.start so restart doesn't actually spawn anything.
     monkeypatch.setattr(
@@ -220,7 +220,7 @@ def test_restart_when_not_running_acts_like_start(tmp_path, monkeypatch, fake_ki
     """restart with no PID file + no listener: stop is a no-op; start runs."""
     monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path))
     monkeypatch.setattr(_pid, "find_by_port", lambda *a, **kw: None)
-    _patch_probe(monkeypatch, ["down", "down"])
+    _patch_probe(monkeypatch, ["absent", "absent"])
 
     started = {}
 
@@ -240,7 +240,7 @@ def test_restart_logs_argv_drift(tmp_path, monkeypatch, fake_kill):
     monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path))
     _pid.write("lc", pid=12345, argv=["pypi-server", "run", "-p", "8080"], port=8080)
     monkeypatch.setattr("auntiepypi._actions._pid._is_alive", lambda pid: True)
-    _patch_probe(monkeypatch, ["down"])
+    _patch_probe(monkeypatch, ["absent"])
     monkeypatch.setattr(
         command,
         "start",

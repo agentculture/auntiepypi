@@ -58,10 +58,15 @@ def _attempt(detection: Detection) -> ReprobeResult:
 
 
 def _matches_desired(status: str, desired: Literal["up", "down"]) -> bool:
-    """``desired="up"`` matches only "up"; ``desired="down"`` matches "down" or "absent"."""
+    """``desired="up"`` matches only "up"; ``desired="down"`` matches only "absent".
+
+    "down" with TCP open (HTTP error / non-2xx / flavor mismatch) means the
+    server is still listening — `stop` shouldn't claim victory. We require
+    "absent" (TCP closed; port truly unbound) to confirm shutdown.
+    """
     if desired == "up":
         return status == "up"
-    return status in ("down", "absent")
+    return status == "absent"
 
 
 def probe(

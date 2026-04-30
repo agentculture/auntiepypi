@@ -156,15 +156,19 @@ def test_reprobe_desired_down_exits_on_absent(monkeypatch):
 
 
 def test_reprobe_desired_down_keeps_polling_while_up(monkeypatch):
-    """desired='down' continues across attempts while status remains 'up'."""
+    """desired='down' continues across attempts while status remains 'up'.
+
+    desired='down' matches only 'absent' (port unbound) — 'down' (TCP open
+    but HTTP error) is treated as "still up" for stop's purposes.
+    """
     from auntiepypi._actions import _reprobe
 
     attempts = []
 
     def fake_attempt(d):
         attempts.append(d)
-        # Stay 'up' for first 3 attempts, then 'down'
-        return _reprobe.ReprobeResult(status="up" if len(attempts) <= 3 else "down")
+        # Stay 'up' for first 3 attempts, then 'absent'
+        return _reprobe.ReprobeResult(status="up" if len(attempts) <= 3 else "absent")
 
     monkeypatch.setattr(_reprobe, "_attempt", fake_attempt)
     elapsed = [0.0]
@@ -182,7 +186,7 @@ def test_reprobe_desired_down_keeps_polling_while_up(monkeypatch):
         _sleep=fake_sleep,
         _now=fake_now,
     )
-    assert result.status == "down"
+    assert result.status == "absent"
     assert len(attempts) == 4
 
 

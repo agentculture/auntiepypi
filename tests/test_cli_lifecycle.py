@@ -48,7 +48,7 @@ def stub_dispatch(monkeypatch):
 # --------- Bare invocation reservation ---------
 
 
-def test_up_bare_invocation_exits_2_with_v060_message(tmp_path, monkeypatch, capsys):
+def test_up_bare_invocation_exits_1_with_v060_message(tmp_path, monkeypatch, capsys):
     monkeypatch.chdir(tmp_path)
     _write_pyproject(tmp_path, "")
     rc = main(["up"])
@@ -58,7 +58,7 @@ def test_up_bare_invocation_exits_2_with_v060_message(tmp_path, monkeypatch, cap
     assert "auntie up <name>" in err or "auntie up --all" in err
 
 
-def test_down_bare_invocation_exits_2(tmp_path, monkeypatch, capsys):
+def test_down_bare_invocation_exits_1(tmp_path, monkeypatch, capsys):
     monkeypatch.chdir(tmp_path)
     _write_pyproject(tmp_path, "")
     rc = main(["down"])
@@ -66,7 +66,7 @@ def test_down_bare_invocation_exits_2(tmp_path, monkeypatch, capsys):
     assert "v0.6.0" in capsys.readouterr().err
 
 
-def test_restart_bare_invocation_exits_2(tmp_path, monkeypatch, capsys):
+def test_restart_bare_invocation_exits_1(tmp_path, monkeypatch, capsys):
     monkeypatch.chdir(tmp_path)
     _write_pyproject(tmp_path, "")
     rc = main(["restart"])

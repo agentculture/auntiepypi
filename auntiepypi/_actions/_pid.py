@@ -48,12 +48,12 @@ class PidRecord:
     port: int
 
 
-def _pid_path(name: str) -> Path:
-    return state_root() / f"{slugify(name)}.pid"
+def _pid_path(name: str, port: int) -> Path:
+    return state_root() / f"{slugify(name)}_{port}.pid"
 
 
-def _sidecar_path(name: str) -> Path:
-    return state_root() / f"{slugify(name)}.json"
+def _sidecar_path(name: str, port: int) -> Path:
+    return state_root() / f"{slugify(name)}_{port}.json"
 
 
 def _atomic_write(target: Path, payload: bytes) -> None:
@@ -80,7 +80,15 @@ def _atomic_write(target: Path, payload: bytes) -> None:
 
 
 def write(name: str, *, pid: int, argv: Sequence[str], port: int) -> None:
-    """Write ``<name>.pid`` and ``<name>.json`` atomically."""
+    """Write ``<name>_<port>.pid`` and ``<name>_<port>.json`` atomically.
+
+    Files are keyed on ``(name, port)`` so duplicate-named declarations
+    (lenient mode) don't clobber each other's PID tracking.
+
+    Order: PID file first, sidecar second. If the sidecar write fails
+    after the PID landed, the orphan PID file is cleaned up so we don't
+    leave half-written state behind.
+    """
     started_at = datetime.now(timezone.utc).isoformat()
     sidecar = {
         "pid": pid,
@@ -88,14 +96,25 @@ def write(name: str, *, pid: int, argv: Sequence[str], port: int) -> None:
         "started_at": started_at,
         "port": port,
     }
-    _atomic_write(_sidecar_path(name), json.dumps(sidecar).encode("utf-8"))
-    _atomic_write(_pid_path(name), f"{pid}\n".encode("ascii"))
+    pid_path = _pid_path(name, port)
+    sidecar_path = _sidecar_path(name, port)
+    _atomic_write(pid_path, f"{pid}\n".encode("ascii"))
+    try:
+        _atomic_write(sidecar_path, json.dumps(sidecar).encode("utf-8"))
+    except OSError:
+        try:
+            pid_path.unlink()
+        except OSError:
+            pass
+        raise
 
 
 def _is_alive(pid: int) -> bool:
     """Probe liveness via ``os.kill(pid, 0)``. ESRCH → dead. EPERM → live but not ours."""
     try:
-        os.kill(pid, 0)
+        # Signal 0 does not actually signal the process — it's the standard
+        # POSIX idiom for liveness/permission probing. Not a real signal.
+        os.kill(pid, 0)  # NOSONAR python:S4828
     except ProcessLookupError:
         return False
     except PermissionError:
@@ -105,10 +124,10 @@ def _is_alive(pid: int) -> bool:
     return True
 
 
-def read(name: str) -> Optional[PidRecord]:
+def read(name: str, port: int) -> Optional[PidRecord]:
     """Return the parsed record, or None if absent / stale (cleans up stale)."""
-    pid_path = _pid_path(name)
-    sidecar_path = _sidecar_path(name)
+    pid_path = _pid_path(name, port)
+    sidecar_path = _sidecar_path(name, port)
     try:
         pid_text = pid_path.read_text(encoding="ascii").strip()
     except OSError:
@@ -116,7 +135,7 @@ def read(name: str) -> Optional[PidRecord]:
     try:
         pid = int(pid_text)
     except ValueError:
-        clear(name)
+        clear(name, port)
         return None
 
     try:
@@ -130,21 +149,38 @@ def read(name: str) -> Optional[PidRecord]:
             sidecar = {}
 
     if not _is_alive(pid):
-        clear(name)
+        clear(name, port)
+        return None
+
+    # Sidecar fields can be corrupted by user edits; treat any parse
+    # failure as an invalid record rather than crashing.
+    try:
+        sidecar_port = int(sidecar.get("port") or 0)
+    except (ValueError, TypeError):
+        clear(name, port)
+        return None
+
+    # If the sidecar's recorded port doesn't match what the caller is
+    # asking about, the file is for a different declaration — treat as
+    # stale. (Belt-and-braces; the filename already disambiguates.)
+    if sidecar_port and sidecar_port != port:
+        clear(name, port)
         return None
 
     argv_list = sidecar.get("argv") or []
+    if not isinstance(argv_list, list):
+        argv_list = []
     return PidRecord(
         pid=pid,
         argv=tuple(str(a) for a in argv_list),
         started_at=str(sidecar.get("started_at") or ""),
-        port=int(sidecar.get("port") or 0),
+        port=sidecar_port,
     )
 
 
-def clear(name: str) -> None:
-    """Delete ``<name>.pid`` and ``<name>.json``. Idempotent."""
-    for p in (_pid_path(name), _sidecar_path(name)):
+def clear(name: str, port: int) -> None:
+    """Delete ``<name>_<port>.pid`` and ``<name>_<port>.json``. Idempotent."""
+    for p in (_pid_path(name, port), _sidecar_path(name, port)):
         try:
             p.unlink()
         except FileNotFoundError:

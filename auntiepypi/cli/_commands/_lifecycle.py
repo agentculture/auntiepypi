@@ -53,12 +53,17 @@ def _detection_for_spec(detections: list[Detection], spec: ServerSpec) -> Detect
     # already covers this for known declarations, but if the user adds a
     # declaration after `auntie overview` ran, this keeps the action path
     # robust.
+    host = spec.host or "127.0.0.1"
+    # HTTP is by design here (matches _detect/_proc.py:169 and the rest
+    # of the detection layer). HTTPS is deferred to v0.6.0+; see
+    # docs/superpowers/specs/2026-04-30-auntiepypi-v0.5.0-...md.
+    url = f"http://{host}:{spec.port}/"  # NOSONAR python:S5332
     return Detection(
         name=spec.name,
         flavor=spec.flavor or "unknown",
-        host=spec.host or "127.0.0.1",
+        host=host,
         port=spec.port,
-        url=f"http://{spec.host or '127.0.0.1'}:{spec.port}/",
+        url=url,
         status="absent",
         source="declared",
     )
@@ -124,7 +129,7 @@ def _refuse_unsupervised(spec: ServerSpec) -> None:
         code=EXIT_USER_ERROR,
         message=(
             f"server {spec.name!r} has managed_by={mode!r} — auntie does not "
-            f"supervise this mode; lifecycle verbs are no-ops"
+            f"supervise this mode; refusing lifecycle operation"
         ),
         remediation=(
             "use a supervised mode (systemd-user or command) in "

@@ -1,7 +1,7 @@
 # auntiepypi v0.5.0 — lifecycle verbs (`up` / `down` / `restart`)
 
 **Status:** approved (brainstorm 2026-04-30; plan
-`/home/spark/.claude/plans/dazzling-snacking-kay.md`).
+`$CLAUDE_HOME/plans/dazzling-snacking-kay.md`).
 
 **Predecessor:** `2026-04-30-auntiepypi-v0.4.0-doctor-lifecycle-design.md`.
 
@@ -128,7 +128,7 @@ internal; no public API is affected.
 ### D4. Bare verb reserved for v0.6.0
 
 ```text
-auntie up                  → exit 2; "first-party auntie server lands in
+auntie up                  → exit 1; "first-party auntie server lands in
                                        v0.6.0; for now use `auntie up <name>`
                                        or `auntie up --all`"
 auntie up <name>           → resolve and dispatch("start", ...)
@@ -371,9 +371,9 @@ Inherits the v0.4.0 patterns:
   `command.restart` clean path; argv drift logged; restart-when-down.
 - `tests/test_actions_systemd_user_lifecycle.py` — `stop`, `restart`
   via `RUN` indirection (already used by `start`).
-- `tests/test_cli_{up,down,restart}.py` — bare exit 2;
-  `<name>` happy path; refused `managed_by=manual`; `--all` aggregate
-  exit codes; `--decide` resolution; `--json` shape.
+- `tests/test_cli_{up,down,restart}.py` — bare exit 1
+  (`EXIT_USER_ERROR`); `<name>` happy path; refused `managed_by=manual`;
+  `--all` aggregate exit codes; `--decide` resolution; `--json` shape.
 - Existing v0.4.0 tests must continue passing with the renamed
   `apply` → `start` and the widened `dispatch(action, ...)`.
 
@@ -410,5 +410,5 @@ actually lands.
 
 ## Tasks
 
-See plan: `/home/spark/.claude/plans/dazzling-snacking-kay.md`. Fourteen
+See plan: `$CLAUDE_HOME/plans/dazzling-snacking-kay.md`. Fourteen
 tasks; task 1 is this spec, tasks 2–14 deliver the implementation.

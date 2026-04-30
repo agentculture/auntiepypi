@@ -20,7 +20,7 @@ def test_write_and_read_roundtrip(tmp_path, monkeypatch):
     monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path))
     _pid.write("main", pid=os.getpid(), argv=["pypi-server", "-p", "8080"], port=8080)
 
-    record = _pid.read("main")
+    record = _pid.read("main", 8080)
     assert record is not None
     assert record.pid == os.getpid()
     assert record.argv == ("pypi-server", "-p", "8080")
@@ -30,22 +30,20 @@ def test_write_and_read_roundtrip(tmp_path, monkeypatch):
 
 def test_read_returns_none_when_absent(tmp_path, monkeypatch):
     monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path))
-    assert _pid.read("nonexistent") is None
+    assert _pid.read("nonexistent", 1) is None
 
 
 def test_read_detects_stale_pid_and_clears(tmp_path, monkeypatch):
     """When the PID is dead, read() returns None AND removes the files."""
     monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path))
-    # 0 is a special PID that os.kill(0, 0) won't ESRCH on, but 2^31-1
-    # is essentially guaranteed not to exist.
-    fake_pid = 2_000_000_000
+    fake_pid = 2_000_000_000  # essentially guaranteed not to exist
     _pid.write("ghost", pid=fake_pid, argv=["x"], port=1)
 
-    pid_file = tmp_path / "auntiepypi" / "ghost.pid"
-    sidecar = tmp_path / "auntiepypi" / "ghost.json"
+    pid_file = tmp_path / "auntiepypi" / "ghost_1.pid"
+    sidecar = tmp_path / "auntiepypi" / "ghost_1.json"
     assert pid_file.exists() and sidecar.exists()
 
-    assert _pid.read("ghost") is None
+    assert _pid.read("ghost", 1) is None
     assert not pid_file.exists()
     assert not sidecar.exists()
 
@@ -54,46 +52,89 @@ def test_read_with_garbage_pid_file_returns_none_and_clears(tmp_path, monkeypatc
     monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path))
     state_dir = tmp_path / "auntiepypi"
     state_dir.mkdir()
-    (state_dir / "junk.pid").write_text("not-a-number\n")
-    (state_dir / "junk.json").write_text("{}")
+    (state_dir / "junk_1.pid").write_text("not-a-number\n")
+    (state_dir / "junk_1.json").write_text("{}")
 
-    assert _pid.read("junk") is None
-    assert not (state_dir / "junk.pid").exists()
+    assert _pid.read("junk", 1) is None
+    assert not (state_dir / "junk_1.pid").exists()
 
 
 def test_read_tolerates_missing_sidecar(tmp_path, monkeypatch):
     monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path))
     state_dir = tmp_path / "auntiepypi"
     state_dir.mkdir()
-    (state_dir / "lone.pid").write_text(f"{os.getpid()}\n")
+    (state_dir / "lone_1.pid").write_text(f"{os.getpid()}\n")
     # No sidecar.
 
-    record = _pid.read("lone")
+    record = _pid.read("lone", 1)
     assert record is not None
     assert record.pid == os.getpid()
     assert record.argv == ()
     assert record.port == 0
 
 
+def test_read_corrupt_sidecar_port_returns_none(tmp_path, monkeypatch):
+    """A non-integer port in the sidecar JSON → invalid record, cleaned up."""
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path))
+    state_dir = tmp_path / "auntiepypi"
+    state_dir.mkdir()
+    (state_dir / "bad_1.pid").write_text(f"{os.getpid()}\n")
+    (state_dir / "bad_1.json").write_text('{"port": "not-an-int", "argv": ["x"]}')
+
+    assert _pid.read("bad", 1) is None
+    assert not (state_dir / "bad_1.pid").exists()
+
+
+def test_read_sidecar_port_mismatch_returns_none(tmp_path, monkeypatch):
+    """Sidecar's port disagrees with the requested port → invalid (treats as stale)."""
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path))
+    state_dir = tmp_path / "auntiepypi"
+    state_dir.mkdir()
+    (state_dir / "main_8080.pid").write_text(f"{os.getpid()}\n")
+    # Sidecar says port=9999 but file is keyed on 8080
+    import json as _json
+
+    (state_dir / "main_8080.json").write_text(
+        _json.dumps({"pid": os.getpid(), "argv": ["x"], "port": 9999, "started_at": "x"})
+    )
+
+    assert _pid.read("main", 8080) is None
+
+
+def test_duplicate_names_with_different_ports_dont_collide(tmp_path, monkeypatch):
+    """Two declarations sharing `name` but on different ports keep separate state."""
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path))
+    pid_a = os.getpid()
+    pid_b = os.getpid()  # not real distinct processes; we just want distinct records
+    _pid.write("main", pid=pid_a, argv=["server-a"], port=8080)
+    _pid.write("main", pid=pid_b, argv=["server-b"], port=9090)
+
+    rec_a = _pid.read("main", 8080)
+    rec_b = _pid.read("main", 9090)
+    assert rec_a is not None and tuple(rec_a.argv) == ("server-a",)
+    assert rec_b is not None and tuple(rec_b.argv) == ("server-b",)
+
+
 def test_clear_is_idempotent(tmp_path, monkeypatch):
     monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path))
-    _pid.clear("never-written")  # no exception
+    _pid.clear("never-written", 1)  # no exception
     _pid.write("real", pid=os.getpid(), argv=["x"], port=1)
-    _pid.clear("real")
-    _pid.clear("real")  # idempotent
-    assert _pid.read("real") is None
+    _pid.clear("real", 1)
+    _pid.clear("real", 1)  # idempotent
+    assert _pid.read("real", 1) is None
 
 
 def test_write_uses_slugified_name(tmp_path, monkeypatch):
     """Names with unsafe chars are slugified before becoming filenames."""
     monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path))
-    _pid.write("Main/Pypi:1", pid=os.getpid(), argv=["x"], port=1)
+    _pid.write("Main/Pypi:1", pid=os.getpid(), argv=["x"], port=8080)
 
     state_dir = tmp_path / "auntiepypi"
     files = sorted(p.name for p in state_dir.iterdir())
     # _logs.slugify lowercases + replaces non-[a-z0-9._-] with '_'.
-    assert "main_pypi_1.pid" in files
-    assert "main_pypi_1.json" in files
+    # Filename also includes the port for duplicate-name disambiguation.
+    assert "main_pypi_1_8080.pid" in files
+    assert "main_pypi_1_8080.json" in files
 
 
 # --------- _argv_matches helper ---------

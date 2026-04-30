@@ -49,10 +49,18 @@ def dispatch(action: Action, detection: Detection, declaration: ServerSpec) -> A
     """Route to the strategy/action for ``declaration.managed_by``.
 
     Never raises. Unknown / unsupervised modes return a uniform result.
+    Unknown action keys (or strategy maps missing an action) likewise
+    return ActionResult(ok=False, ...) instead of KeyError.
     """
     mode = declaration.managed_by
     if mode in ACTIONS:
-        return ACTIONS[mode][action](detection, declaration)
+        strategies = ACTIONS[mode]
+        if action not in strategies:
+            return ActionResult(
+                ok=False,
+                detail=f"action={action!r} not supported for managed_by={mode!r}",
+            )
+        return strategies[action](detection, declaration)
     if mode in _NOT_IMPLEMENTED:
         return ActionResult(
             ok=False,

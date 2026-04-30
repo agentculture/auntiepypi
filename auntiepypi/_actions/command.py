@@ -138,10 +138,31 @@ def _spawn_error(err: OSError, declaration: ServerSpec, log_path: Path) -> Actio
 def _resolve_target_pid(declaration: ServerSpec) -> tuple[int | None, str]:
     """Find the PID to signal. Returns (pid, source) where source is
     "pid-file" or "port-walk", or (None, "") when no target is found.
+
+    PID-file path: cross-check on Linux that the recorded PID is the
+    listener on the declared port. PID reuse can leave a live-but-stale
+    PID in the file; signaling it would kill an unrelated process.
+    When the cross-check fails, clear the PID file and fall through to
+    the port-walk fallback.
     """
-    record = _pid.read(declaration.name)
+    record = _pid.read(declaration.name, declaration.port)
     if record is not None:
-        return record.pid, "pid-file"
+        if declaration.command:
+            verified = _pid.find_by_port(
+                declaration.port,
+                expected_argv=list(declaration.command),
+            )
+            # If find_by_port returns None on non-Linux, trust the PID
+            # file (best we can do without /proc). On Linux, require the
+            # PID file's PID to match the actual listener.
+            import sys as _sys
+
+            if _sys.platform == "linux" and verified is not None and verified != record.pid:
+                # Stale-but-live PID in the file; the actual listener is a
+                # different process. Clear and fall through.
+                _pid.clear(declaration.name, declaration.port)
+            else:
+                return record.pid, "pid-file"
     if declaration.command:
         pid = _pid.find_by_port(
             declaration.port,
@@ -170,7 +191,7 @@ def stop(detection: Detection, declaration: ServerSpec) -> ActionResult:
                     f"declaration; refusing to kill"
                 ),
             )
-        _pid.clear(declaration.name)
+        _pid.clear(declaration.name, declaration.port)
         return ActionResult(ok=True, detail="already stopped")
 
     # Send SIGTERM, then poll for the port to unbind.
@@ -178,7 +199,7 @@ def stop(detection: Detection, declaration: ServerSpec) -> ActionResult:
         KILL(target_pid, signal.SIGTERM)
     except ProcessLookupError:
         # Process died between read() and kill() — treat as success
-        _pid.clear(declaration.name)
+        _pid.clear(declaration.name, declaration.port)
         return ActionResult(ok=True, detail="already stopped (race)")
     except OSError as err:
         return ActionResult(
@@ -187,8 +208,8 @@ def stop(detection: Detection, declaration: ServerSpec) -> ActionResult:
         )
 
     result = probe(detection, desired="down", budget_seconds=5.0)
-    if result.status in ("down", "absent"):
-        _pid.clear(declaration.name)
+    if result.status == "absent":
+        _pid.clear(declaration.name, declaration.port)
         suffix = "" if source == "pid-file" else f" (found via {source})"
         return ActionResult(ok=True, detail=f"stopped (SIGTERM){suffix}", pid=target_pid)
 
@@ -196,14 +217,14 @@ def stop(detection: Detection, declaration: ServerSpec) -> ActionResult:
     try:
         KILL(target_pid, signal.SIGKILL)
     except ProcessLookupError:
-        _pid.clear(declaration.name)
+        _pid.clear(declaration.name, declaration.port)
         return ActionResult(ok=True, detail="stopped (SIGTERM, race on SIGKILL)", pid=target_pid)
     except OSError as err:
         return ActionResult(ok=False, detail=f"SIGKILL failed (pid={target_pid}): {err}")
 
     result = probe(detection, desired="down", budget_seconds=2.0)
-    if result.status in ("down", "absent"):
-        _pid.clear(declaration.name)
+    if result.status == "absent":
+        _pid.clear(declaration.name, declaration.port)
         return ActionResult(
             ok=True,
             detail="stopped (SIGKILL after timeout)",
@@ -219,7 +240,7 @@ def stop(detection: Detection, declaration: ServerSpec) -> ActionResult:
 def restart(detection: Detection, declaration: ServerSpec) -> ActionResult:
     """`stop` then `start`. New spawn uses current `declaration.command`."""
     # Detect drift before stop (so we can log against the existing log file).
-    record = _pid.read(declaration.name)
+    record = _pid.read(declaration.name, declaration.port)
     if record is not None and tuple(record.argv) != tuple(declaration.command or ()):
         try:
             log_path = path_for(declaration.name)

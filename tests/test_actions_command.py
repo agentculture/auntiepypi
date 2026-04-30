@@ -61,7 +61,7 @@ def test_command_happy_path(tmp_path, monkeypatch):
         # PID file + sidecar were written on success
         from auntiepypi._actions import _pid
 
-        record = _pid.read("test")
+        record = _pid.read("test", port)
         assert record is not None
         assert record.pid == result.pid
         assert record.port == port
@@ -85,7 +85,7 @@ def test_command_failed_start_does_not_write_pid_file(tmp_path, monkeypatch):
     assert result.ok is False
     from auntiepypi._actions import _pid
 
-    assert _pid.read("missing-binary") is None
+    assert _pid.read("missing-binary", port) is None
 
 
 def test_command_not_found(tmp_path, monkeypatch):
