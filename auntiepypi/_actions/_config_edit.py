@@ -55,18 +55,22 @@ def _validate_pyproject_path(pyproject: Path) -> Path:
     """
     target = pyproject.resolve()
     if target.name != "pyproject.toml":
-        raise AfiError(
-            code=EXIT_USER_ERROR,
-            message=f"refusing to operate on non-pyproject.toml file: {pyproject!r}",
-            remediation="this is a defensive guard; report a bug if seen in normal use",
-        )
+        raise _path_guard_error("non-pyproject.toml file", pyproject)
     if not target.is_file():
-        raise AfiError(
-            code=EXIT_USER_ERROR,
-            message=f"refusing to operate on non-regular file: {pyproject!r}",
-            remediation="this is a defensive guard; report a bug if seen in normal use",
-        )
+        raise _path_guard_error("non-regular file", pyproject)
     return target
+
+
+_PATH_GUARD_HINT = "this is a defensive guard; report a bug if seen in normal use"
+
+
+def _path_guard_error(kind: str, pyproject: Path) -> AfiError:
+    """Build the AfiError for `_validate_pyproject_path`'s two refusal cases."""
+    return AfiError(
+        code=EXIT_USER_ERROR,
+        message=f"refusing to operate on {kind}: {pyproject!r}",
+        remediation=_PATH_GUARD_HINT,
+    )
 
 
 def delete_entry(pyproject: Path, name: str, *, which: int = 0) -> DeleteResult:
