@@ -13,7 +13,7 @@ This file builds up incrementally across plan tasks 11/12/13/14:
 
 from __future__ import annotations
 
-import json  # noqa: F401  # used in T12-T14
+import json
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -546,3 +546,138 @@ def test_doctor_apply_unknown_decide_key_exits_1(tmp_path, monkeypatch):
     with pytest.raises(AfiError) as excinfo:
         cmd_doctor(_make_args(apply=True, decide=["unknown:foo=bar"]))
     assert excinfo.value.code == 1
+
+
+# ---------------------------------------------------------------------------
+# T14: JSON envelope shape
+# ---------------------------------------------------------------------------
+
+
+def test_doctor_json_envelope_shape(tmp_path, monkeypatch, capsys):
+    from auntiepypi._detect._detection import Detection
+
+    monkeypatch.chdir(tmp_path)
+    _write_pyproject(
+        tmp_path,
+        """\
+[[tool.auntiepypi.servers]]
+name = "main"
+flavor = "pypiserver"
+port = 8080
+managed_by = "manual"
+""",
+    )
+    monkeypatch.setattr(
+        "auntiepypi.cli._commands.doctor.detect_all",
+        lambda *a, **kw: [
+            Detection(
+                name="main",
+                flavor="pypiserver",
+                host="127.0.0.1",
+                port=8080,
+                url="http://127.0.0.1:8080/",
+                status="up",
+                source="declared",
+                managed_by="manual",
+            )
+        ],
+    )
+    cmd_doctor(_make_args(json=True))
+    out = capsys.readouterr().out
+    payload = json.loads(out)
+    assert payload["subject"] == "auntie doctor"
+    assert isinstance(payload["sections"], list)
+    assert payload["summary"]["applied"] is False
+    assert payload["summary"]["total"] == 1
+    s = payload["sections"][0]
+    assert s["category"] == "servers"
+    assert s["title"] == "main"
+    field_names = {f["name"] for f in s["fields"]}
+    assert {"flavor", "host", "port", "status", "source", "managed_by", "diagnosis"} <= field_names
+
+
+def test_doctor_json_apply_adds_fix_fields(tmp_path, monkeypatch, capsys):
+    from auntiepypi._actions._action import ActionResult
+    from auntiepypi._detect._detection import Detection
+
+    monkeypatch.chdir(tmp_path)
+    _write_pyproject(
+        tmp_path,
+        """\
+[[tool.auntiepypi.servers]]
+name = "main"
+flavor = "pypiserver"
+port = 8080
+managed_by = "command"
+command = ["echo", "hi"]
+""",
+    )
+    monkeypatch.setattr(
+        "auntiepypi.cli._commands.doctor.detect_all",
+        lambda *a, **kw: [
+            Detection(
+                name="main",
+                flavor="pypiserver",
+                host="127.0.0.1",
+                port=8080,
+                url="http://127.0.0.1:8080/",
+                status="down",
+                source="declared",
+                managed_by="command",
+                command=("echo", "hi"),
+            )
+        ],
+    )
+    monkeypatch.setattr(
+        "auntiepypi.cli._commands.doctor._actions.dispatch",
+        lambda d, s: ActionResult(
+            ok=True, detail="started", log_path="/var/log/auntiepypi/x.log", pid=42
+        ),
+    )
+    cmd_doctor(_make_args(apply=True, json=True))
+    out = capsys.readouterr().out
+    payload = json.loads(out)
+    assert payload["summary"]["applied"] is True
+    fields = payload["sections"][0]["fields"]
+    field_map = {f["name"]: f["value"] for f in fields}
+    assert field_map["fix_attempted"] == "true"
+    assert field_map["fix_ok"] == "true"
+    assert field_map["fix_detail"] == "started"
+    assert field_map["log_path"] == "/var/log/auntiepypi/x.log"
+    assert field_map["pid"] == "42"
+
+
+def test_doctor_json_half_supervised_marks_deleted_on_apply(tmp_path, monkeypatch, capsys):
+    from auntiepypi._detect._detection import Detection
+
+    monkeypatch.chdir(tmp_path)
+    _write_pyproject(
+        tmp_path,
+        """\
+[[tool.auntiepypi.servers]]
+name = "stale"
+flavor = "devpi"
+port = 3141
+managed_by = "systemd-user"
+""",
+    )
+    monkeypatch.setattr(
+        "auntiepypi.cli._commands.doctor.detect_all",
+        lambda *a, **kw: [
+            Detection(
+                name="stale",
+                flavor="devpi",
+                host="127.0.0.1",
+                port=3141,
+                url="http://127.0.0.1:3141/+api",
+                status="down",
+                source="declared",
+                managed_by="systemd-user",
+            )
+        ],
+    )
+    cmd_doctor(_make_args(apply=True, json=True))
+    out = capsys.readouterr().out
+    payload = json.loads(out)
+    field_map = {f["name"]: f["value"] for f in payload["sections"][0]["fields"]}
+    assert field_map.get("deleted") == "true"
