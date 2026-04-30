@@ -123,3 +123,91 @@ def test_reprobe_early_exit_on_first_success(monkeypatch):
     assert result.status == "up"
     assert len(attempts) == 2  # first attempt at offset 0.5, success at offset 1.0
     assert len(sleep_calls) == 2  # sleeps before each of the two attempts
+
+
+def test_reprobe_desired_down_exits_on_absent(monkeypatch):
+    """desired='down' wins as soon as we observe absent (no listener)."""
+    from auntiepypi._actions import _reprobe
+
+    attempts = []
+
+    def fake_attempt(d):
+        attempts.append(d)
+        return _reprobe.ReprobeResult(status="absent")
+
+    monkeypatch.setattr(_reprobe, "_attempt", fake_attempt)
+    elapsed = [0.0]
+
+    def fake_now():
+        return elapsed[0]
+
+    def fake_sleep(s):
+        elapsed[0] += s
+
+    result = probe(
+        _detection(1),
+        budget_seconds=5.0,
+        desired="down",
+        _sleep=fake_sleep,
+        _now=fake_now,
+    )
+    assert result.status == "absent"
+    assert len(attempts) == 1  # first attempt observed absent → exit
+
+
+def test_reprobe_desired_down_keeps_polling_while_up(monkeypatch):
+    """desired='down' continues across attempts while status remains 'up'."""
+    from auntiepypi._actions import _reprobe
+
+    attempts = []
+
+    def fake_attempt(d):
+        attempts.append(d)
+        # Stay 'up' for first 3 attempts, then 'down'
+        return _reprobe.ReprobeResult(status="up" if len(attempts) <= 3 else "down")
+
+    monkeypatch.setattr(_reprobe, "_attempt", fake_attempt)
+    elapsed = [0.0]
+
+    def fake_now():
+        return elapsed[0]
+
+    def fake_sleep(s):
+        elapsed[0] += s
+
+    result = probe(
+        _detection(1),
+        budget_seconds=5.0,
+        desired="down",
+        _sleep=fake_sleep,
+        _now=fake_now,
+    )
+    assert result.status == "down"
+    assert len(attempts) == 4
+
+
+def test_reprobe_desired_down_exhausts_when_still_up(monkeypatch):
+    """desired='down' but server stays up for the full budget → returns final 'up'."""
+    from auntiepypi._actions import _reprobe
+
+    monkeypatch.setattr(
+        _reprobe,
+        "_attempt",
+        lambda d: _reprobe.ReprobeResult(status="up"),
+    )
+    elapsed = [0.0]
+
+    def fake_now():
+        return elapsed[0]
+
+    def fake_sleep(s):
+        elapsed[0] += s
+
+    result = probe(
+        _detection(1),
+        budget_seconds=5.0,
+        desired="down",
+        _sleep=fake_sleep,
+        _now=fake_now,
+    )
+    assert result.status == "up"  # ran the whole budget, never matched desired

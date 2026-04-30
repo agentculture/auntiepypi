@@ -1,8 +1,9 @@
 """Post-spawn re-probe loop.
 
 Polls a server at increasing intervals within a caller-supplied wall-clock
-budget. The first "up" result exits early; on budget exhaustion the final
-attempt's result is returned.
+budget. Exits early when the observed status matches the caller's
+``desired`` state (``"up"`` for start/restart; ``"down"`` for stop).
+On budget exhaustion the final attempt's result is returned.
 
 Poll offsets (seconds): 0.5, 1.0, 2.0, 3.5, 5.0
 """
@@ -12,6 +13,7 @@ from __future__ import annotations
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Literal
 
 from auntiepypi._detect._detection import Detection
 from auntiepypi._detect._http import content_type, probe_endpoint
@@ -55,20 +57,31 @@ def _attempt(detection: Detection) -> ReprobeResult:
     return ReprobeResult(status="up")
 
 
+def _matches_desired(status: str, desired: Literal["up", "down"]) -> bool:
+    """``desired="up"`` matches only "up"; ``desired="down"`` matches "down" or "absent"."""
+    if desired == "up":
+        return status == "up"
+    return status in ("down", "absent")
+
+
 def probe(
     detection: Detection,
     *,
     budget_seconds: float = 5.0,
+    desired: Literal["up", "down"] = "up",
     _sleep: Callable[[float], None] = time.sleep,
     _now: Callable[[], float] = time.monotonic,
 ) -> ReprobeResult:
-    """Poll *detection* until "up" or *budget_seconds* is exhausted.
+    """Poll *detection* until ``status`` matches ``desired`` or budget exhausted.
 
     Attempt offsets are 0.5 s, 1.0 s, 2.0 s, 3.5 s, 5.0 s from start.
-    First "up" wins; the last attempt's result is returned on exhaustion.
+    First match wins; the last attempt's result is returned on exhaustion.
 
     :param detection: Server description to probe.
     :param budget_seconds: Wall-clock ceiling; attempts past this are skipped.
+    :param desired: Target state — ``"up"`` for start/restart (default;
+        v0.4.0 behavior); ``"down"`` for stop. ``"down"`` matches both
+        "down" and "absent".
     :param _sleep: Injectable sleep callable (for tests).
     :param _now: Injectable monotonic clock (for tests).
     """
@@ -86,7 +99,7 @@ def probe(
             _sleep(wait)
 
         result = _attempt(detection)
-        if result.status == "up":
+        if _matches_desired(result.status, desired):
             return result
 
     return result
