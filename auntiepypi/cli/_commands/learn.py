@@ -41,6 +41,15 @@ Commands
     [--decide KEY=VALUE]       supervised entries. --decide resolves
                                ambiguous cases (duplicate names). Default
                                is dry-run. Supports --json.
+  auntie up <name>|--all       Start a declared server (or every supervised
+                               one). Bare `auntie up` is reserved for
+                               v0.6.0's first-party server. Supports --json.
+  auntie down <name>|--all     Stop a declared server (or every supervised
+                               one). Same bare-form reservation as `up`.
+                               Supports --json.
+  auntie restart <name>|--all  Restart a declared server (atomic for
+                               systemd-user; stop+start for command).
+                               Same bare-form reservation. Supports --json.
   auntie whoami                Auth/env probe — which PyPI / TestPyPI /
                                local index is the active environment
                                pointing at? Supports --json.
@@ -74,7 +83,8 @@ Exit-code policy
   0 success / dry-run / ambiguous --decide deferred / unknown TARGET
   1 configuration or usage error (cross-field validation, unknown --decide key,
     unparseable block, .bak slot exhaustion)
-  2 --apply ran but at least one actionable server is still not up
+  2 --apply ran but at least one actionable server is still not up;
+    or `up` / `down` / `restart` failed for at least one targeted server
 
 More detail
 -----------
@@ -107,6 +117,28 @@ def _as_json_payload() -> dict[str, object]:
                 "summary": (
                     "Diagnose declared inventory; --apply to act (start servers, "
                     "delete half-supervised). Use --decide for ambiguous duplicates."
+                ),
+            },
+            {
+                "path": ["up"],
+                "summary": (
+                    "Start a declared server (one by name; --all for every "
+                    "supervised). Bare `auntie up` reserved for v0.6.0's "
+                    "first-party server."
+                ),
+            },
+            {
+                "path": ["down"],
+                "summary": (
+                    "Stop a declared server (one by name; --all for every "
+                    "supervised). PID-tracked for managed_by=command."
+                ),
+            },
+            {
+                "path": ["restart"],
+                "summary": (
+                    "Restart a declared server. Atomic for systemd-user; "
+                    "stop+start for command (re-spawn from current pyproject argv)."
                 ),
             },
             {
