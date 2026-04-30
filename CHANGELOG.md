@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-04-30
+
+### Added
+
+- _actions/ lifecycle module with systemd-user and command dispatch strategies
+- _decide registry for extensible ambiguity resolution
+- auntie doctor --apply (replaces --fix): dispatches actionable servers, deletes half-supervised declarations
+- auntie doctor --decide=duplicate:NAME=N: resolves duplicate-name ambiguity before acting
+- auntie doctor [TARGET] drill-down: diagnose a single server by name
+- Cross-field config validation in strict + lenient modes (managed_by/unit/command consistency)
+- Numbered pyproject.toml.<N>.bak snapshots written before any mutation
+- auntiepypi/_errors.py extracted to break circular import
+
+### Changed
+
+- --fix flag renamed to --apply
+
 ## [0.3.0] - 2026-04-29
 
 ### Added
