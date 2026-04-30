@@ -136,3 +136,26 @@ def test_lenient_no_pyproject_returns_empty(tmp_path):
     cfg, gaps = load_servers_lenient(start=tmp_path)
     assert cfg.specs == ()
     assert gaps == []
+
+
+def test_lenient_structural_error_still_raises(tmp_path):
+    """Lenient mode tolerates cross-field gaps but NOT structural errors.
+
+    A bad flavor (``"Pypiserver"`` — wrong case, not in the closed set) must
+    still raise so callers don't silently see a malformed spec.
+    """
+    import pytest
+
+    from auntiepypi._detect._config import ServerConfigError
+
+    start = _write(
+        tmp_path,
+        """\
+[[tool.auntiepypi.servers]]
+name = "bad"
+flavor = "Pypiserver"
+port = 8080
+""",
+    )
+    with pytest.raises(ServerConfigError, match="invalid 'flavor'"):
+        load_servers_lenient(start=start)
