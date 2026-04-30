@@ -49,24 +49,8 @@ def apply(detection: Detection, declaration: ServerSpec) -> ActionResult:
                     stdin=subprocess.DEVNULL,
                     cwd=str(Path.cwd()),
                 )
-            except FileNotFoundError as err:
-                return ActionResult(
-                    ok=False,
-                    detail=f"command not found: {err.filename or declaration.command[0]}",
-                    log_path=str(log_path),
-                )
-            except PermissionError as err:
-                return ActionResult(
-                    ok=False,
-                    detail=f"permission denied: {err.filename or declaration.command[0]}",
-                    log_path=str(log_path),
-                )
             except OSError as err:
-                return ActionResult(
-                    ok=False,
-                    detail=f"{type(err).__name__}: {err}",
-                    log_path=str(log_path),
-                )
+                return _spawn_error(err, declaration, log_path)
     except OSError as err:  # opening the log file itself
         return ActionResult(ok=False, detail=f"could not open log: {err}")
 
@@ -104,3 +88,20 @@ def apply(detection: Detection, declaration: ServerSpec) -> ActionResult:
         log_path=str(log_path),
         pid=None,
     )
+
+
+def _spawn_error(err: OSError, declaration: ServerSpec, log_path: Path) -> ActionResult:
+    """Map a Popen-time OSError to an ActionResult.
+
+    `FileNotFoundError` and `PermissionError` are subclasses of OSError and get
+    distinguished phrasing here; the catch-all OSError branch is for everything
+    else (ENOEXEC, EMFILE, etc.) and surfaces the type name + str(err).
+    """
+    argv0 = err.filename or declaration.command[0] if declaration.command else "<unset>"
+    if isinstance(err, FileNotFoundError):
+        detail = f"command not found: {argv0}"
+    elif isinstance(err, PermissionError):
+        detail = f"permission denied: {argv0}"
+    else:
+        detail = f"{type(err).__name__}: {err}"
+    return ActionResult(ok=False, detail=detail, log_path=str(log_path))
