@@ -18,7 +18,8 @@ class Detection:
     ``status``: ``"up"`` (TCP+HTTP healthy), ``"down"`` (TCP open, HTTP
     unhealthy), ``"absent"`` (nothing listening).
 
-    ``source``: ``"declared"`` (came from ``[[tool.auntiepypi.servers]]``),
+    ``source``: ``"local"`` (the first-party auntie server),
+    ``"declared"`` (came from ``[[tool.auntiepypi.servers]]``),
     ``"port"`` (default port scan), ``"proc"`` (``--proc`` ``/proc`` scan).
     """
 

@@ -2,13 +2,18 @@
 
 Order of operations:
 
-1. ``_declared.detect`` first. Build ``covered = {(host, port) ...}``.
-2. ``_port.detect`` over default ports minus ``covered``. If declarations
-   exist, drop ``status="absent"`` from the port detector's output
-   (the augment + suppress-absent rule).
-3. If ``scan_processes``: ``_proc.detect``. Merge by ``(host, port)`` —
-   proc-found pids enrich existing detections; proc-only detections are
-   appended.
+1. ``_local.detect`` first. The first-party server is always one
+   record (status="absent" when not running). Its ``(host, port)``
+   enters ``covered`` so the default-port scanner doesn't double-
+   report it as ``devpi`` on 3141.
+2. ``_declared.detect`` next. Append to ``covered`` with each
+   declaration's ``(host, port)``.
+3. ``_port.detect`` over default ports minus ``covered``. If
+   declarations exist, drop ``status="absent"`` from the port
+   detector's output (the augment + suppress-absent rule).
+4. If ``scan_processes``: ``_proc.detect``. Merge by ``(host, port)``
+   — proc-found pids enrich existing detections; proc-only
+   detections are appended.
 """
 
 from __future__ import annotations
@@ -18,14 +23,17 @@ from dataclasses import replace
 from auntiepypi._detect._config import ServersConfig
 from auntiepypi._detect._declared import detect as _declared_detect
 from auntiepypi._detect._detection import Detection
+from auntiepypi._detect._local import detect as _local_detect
 from auntiepypi._detect._port import detect as _port_detect
 from auntiepypi._detect._proc import detect as _proc_detect
 
 
 def detect_all(config: ServersConfig) -> list[Detection]:
     """Run all detectors and merge results."""
+    local_result = _local_detect()
     declared_results = _declared_detect(config.specs, scan_processes=config.scan_processes)
-    covered: set[tuple[str, int]] = {(d.host, d.port) for d in declared_results}
+    covered: set[tuple[str, int]] = {(local_result.host, local_result.port)}
+    covered.update((d.host, d.port) for d in declared_results)
 
     port_results = _port_detect(
         config.specs,
@@ -35,7 +43,7 @@ def detect_all(config: ServersConfig) -> list[Detection]:
     if declared_results:
         port_results = [d for d in port_results if d.status != "absent"]
 
-    detections = list(declared_results) + list(port_results)
+    detections = [local_result] + list(declared_results) + list(port_results)
 
     if not config.scan_processes:
         return detections
