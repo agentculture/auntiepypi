@@ -28,6 +28,13 @@ _TRIPLE_SINGLE = "'" * 3
 
 @dataclass(frozen=True)
 class DeleteResult:
+    """Outcome of a `delete_entry` call.
+
+    :param lines_removed: ``(first_line, last_line)`` 1-indexed, **inclusive** —
+        the same form the doctor audit log prints (e.g. ``"removed lines
+        42-49"``). ``None`` when ``ok`` is ``False``.
+    """
+
     ok: bool
     reason: str = ""
     lines_removed: tuple[int, int] | None = None
