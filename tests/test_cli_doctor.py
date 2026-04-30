@@ -718,6 +718,137 @@ command = ["echo", "hi"]
     assert field_map["pid"] == "42"
 
 
+def test_doctor_apply_aborts_on_refused_delete(tmp_path, monkeypatch):
+    """When delete_entry refuses (ok=False), --apply aborts with exit 1."""
+    from auntiepypi._actions._config_edit import DeleteResult
+    from auntiepypi._detect._detection import Detection
+
+    monkeypatch.chdir(tmp_path)
+    _write_pyproject(
+        tmp_path,
+        """\
+[[tool.auntiepypi.servers]]
+name = "stale"
+flavor = "devpi"
+port = 3141
+managed_by = "systemd-user"
+""",
+    )
+    monkeypatch.setattr(
+        "auntiepypi.cli._commands.doctor.detect_all",
+        lambda *a, **kw: [
+            Detection(
+                name="stale",
+                flavor="devpi",
+                host="127.0.0.1",
+                port=3141,
+                url="http://127.0.0.1:3141/+api",
+                status="down",
+                source="declared",
+                managed_by="systemd-user",
+            )
+        ],
+    )
+    # Simulate delete_entry returning ok=False (e.g. inline-table refusal)
+    monkeypatch.setattr(
+        "auntiepypi.cli._commands.doctor.delete_entry",
+        lambda *a, **kw: DeleteResult(
+            ok=False, reason="could not parse: inline-table form for [[tool.auntiepypi.servers]]"
+        ),
+    )
+    with pytest.raises(AfiError) as excinfo:
+        cmd_doctor(_make_args(apply=True))
+    assert excinfo.value.code == 1
+    assert (
+        "refused" in excinfo.value.message.lower()
+        or "could not parse" in excinfo.value.message.lower()
+    )
+
+
+def test_doctor_apply_only_marks_successful_deletions(tmp_path, monkeypatch, capsys):
+    """The `deleted=true` JSON field must only appear for actually-deleted entries."""
+    from auntiepypi._detect._detection import Detection
+
+    monkeypatch.chdir(tmp_path)
+    p = _write_pyproject(
+        tmp_path,
+        """\
+[[tool.auntiepypi.servers]]
+name = "stale"
+flavor = "devpi"
+port = 3141
+managed_by = "systemd-user"
+""",
+    )
+    monkeypatch.setattr(
+        "auntiepypi.cli._commands.doctor.detect_all",
+        lambda *a, **kw: [
+            Detection(
+                name="stale",
+                flavor="devpi",
+                host="127.0.0.1",
+                port=3141,
+                url="http://127.0.0.1:3141/+api",
+                status="down",
+                source="declared",
+                managed_by="systemd-user",
+            )
+        ],
+    )
+    cmd_doctor(_make_args(apply=True, json=True))
+    out = capsys.readouterr().out
+    payload = json.loads(out)
+    field_map = {f["name"]: f["value"] for f in payload["sections"][0]["fields"]}
+    assert field_map.get("deleted") == "true"
+    # The deletion really happened
+    assert "stale" not in p.read_text()
+
+
+def test_doctor_apply_status_reflects_fix_ok(tmp_path, monkeypatch, capsys):
+    """When a fix succeeds, the post-apply payload shows status=up, not the original down."""
+    from auntiepypi._actions._action import ActionResult
+    from auntiepypi._detect._detection import Detection
+
+    monkeypatch.chdir(tmp_path)
+    _write_pyproject(
+        tmp_path,
+        """\
+[[tool.auntiepypi.servers]]
+name = "main"
+flavor = "pypiserver"
+port = 8080
+managed_by = "command"
+command = ["echo", "hi"]
+""",
+    )
+    monkeypatch.setattr(
+        "auntiepypi.cli._commands.doctor.detect_all",
+        lambda *a, **kw: [
+            Detection(
+                name="main",
+                flavor="pypiserver",
+                host="127.0.0.1",
+                port=8080,
+                url="http://127.0.0.1:8080/",
+                status="down",
+                source="declared",
+                managed_by="command",
+                command=("echo", "hi"),
+            )
+        ],
+    )
+    monkeypatch.setattr(
+        "auntiepypi.cli._commands.doctor._actions.dispatch",
+        lambda d, s: ActionResult(ok=True, detail="started", pid=42),
+    )
+    cmd_doctor(_make_args(apply=True, json=True))
+    out = capsys.readouterr().out
+    payload = json.loads(out)
+    field_map = {f["name"]: f["value"] for f in payload["sections"][0]["fields"]}
+    assert field_map["status"] == "up"  # was "down" pre-apply
+    assert field_map["fix_ok"] == "true"
+
+
 def test_doctor_json_half_supervised_marks_deleted_on_apply(tmp_path, monkeypatch, capsys):
     from auntiepypi._detect._detection import Detection
 

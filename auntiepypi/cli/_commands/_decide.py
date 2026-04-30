@@ -15,10 +15,34 @@ run. This keeps re-runs idempotent.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Callable
 
 from auntiepypi.cli._errors import EXIT_USER_ERROR, AfiError
 
 KNOWN_DECISIONS: frozenset[str] = frozenset({"duplicate"})
+
+
+def _validate_duplicate_value(name: str, value: str) -> None:
+    """Raise AfiError on bad ``duplicate:NAME=<value>`` (must be positive int)."""
+    try:
+        idx = int(value)
+    except ValueError as err:
+        raise AfiError(
+            code=EXIT_USER_ERROR,
+            message=f"--decide=duplicate:{name}={value!r}: must be a positive integer",
+            remediation="example: --decide=duplicate:main=1   (keep first occurrence)",
+        ) from err
+    if idx < 1:
+        raise AfiError(
+            code=EXIT_USER_ERROR,
+            message=f"--decide=duplicate:{name}={value!r}: must be >= 1 (got {idx})",
+            remediation="example: --decide=duplicate:main=1   (keep first occurrence)",
+        )
+
+
+_VALIDATORS: dict[str, Callable[[str, str], None]] = {
+    "duplicate": _validate_duplicate_value,
+}
 
 
 @dataclass(frozen=True)
@@ -62,5 +86,8 @@ def parse_decisions(raw: list[str]) -> Decisions:
                 message=f"--decide: unknown decision kind {kind!r}",
                 remediation=f"known kinds: {sorted(KNOWN_DECISIONS)}",
             )
+        validator = _VALIDATORS.get(kind)
+        if validator is not None:
+            validator(name, value)
         out[(kind, name)] = value
     return Decisions(by_kind_name=out)

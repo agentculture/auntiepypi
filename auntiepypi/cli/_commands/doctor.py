@@ -12,6 +12,7 @@ T12 scope: --apply path — dispatch actionable, delete half-supervised, exit 2 
 from __future__ import annotations
 
 import argparse
+import dataclasses
 from dataclasses import dataclass
 
 from auntiepypi import _actions
@@ -26,7 +27,7 @@ from auntiepypi._detect._config import (
 from auntiepypi._detect._detection import Detection
 from auntiepypi._packages_config import find_pyproject
 from auntiepypi.cli._commands._decide import Decisions, parse_decisions
-from auntiepypi.cli._errors import EXIT_ENV_ERROR, EXIT_SUCCESS, AfiError
+from auntiepypi.cli._errors import EXIT_ENV_ERROR, EXIT_SUCCESS, EXIT_USER_ERROR, AfiError
 from auntiepypi.cli._output import emit_diagnostic, emit_result
 
 _SUBJECT = "auntie doctor"
@@ -62,10 +63,13 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     json_mode = bool(getattr(args, "json", False))
 
     action_results: dict[str, ActionResult] = {}
+    deleted_names: set[str] = set()
     if apply_mode:
-        action_results = _apply(items, decisions)
+        action_results, deleted_names = _apply(items, decisions)
 
-    payload = _build_payload(items, applied=apply_mode, action_results=action_results)
+    payload = _build_payload(
+        items, applied=apply_mode, action_results=action_results, deleted_names=deleted_names
+    )
 
     if json_mode:
         emit_result(payload, json_mode=True)
@@ -90,19 +94,26 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     return EXIT_SUCCESS
 
 
-def _apply(items: list[_Item], decisions: Decisions) -> dict[str, ActionResult]:
-    """Run the mutating apply path. Returns action_results keyed by detection.name.
+def _apply(items: list[_Item], decisions: Decisions) -> tuple[dict[str, ActionResult], set[str]]:
+    """Run the mutating apply path.
 
-    Order: stage all pending config-mutations → snapshot once → execute deletions
-    → dispatch actionable entries.
+    Returns ``(action_results, deleted_names)`` where ``deleted_names`` is
+    the set of detection names that were *successfully* removed from
+    pyproject.toml. Entries that were refused (inline-table, multi-line
+    string) cause an immediate ``AfiError(code=1)`` rather than a silent
+    skip.
+
+    Order: stage all pending config-mutations → snapshot once → execute
+    deletions → dispatch actionable entries.
     """
     half_sup = [it for it in items if it.action_class == "half_supervised"]
 
-    # For each duplicate gap with a decision, compute (name, original_idx) pairs
-    # to delete — everything except the kept index.  Iterate ALL items (not just
-    # "ambiguous") because when a decision is supplied the item may already be
-    # re-classified (e.g. "skip/healthy").  Deduplicate by (name, original_idx)
-    # and sort DESCENDING so later deletions don't shift earlier indices.
+    # For each duplicate gap with a decision, compute (name, occurrence_idx)
+    # pairs to delete — everything except the kept index.  Iterate ALL items
+    # (not just "ambiguous") because when a decision is supplied the item may
+    # already be re-classified (e.g. "skip/healthy").  Deduplicate by
+    # (name, occ_idx) and sort DESCENDING so later deletions don't shift
+    # earlier indices.
     duplicate_deletions: list[tuple[str, int]] = []
     seen_names: set[str] = set()
     for it in items:
@@ -114,10 +125,7 @@ def _apply(items: list[_Item], decisions: Decisions) -> dict[str, ActionResult]:
             chosen = decisions.for_key("duplicate", gap.name)
             if chosen is None:
                 continue
-            try:
-                keep_idx = int(chosen) - 1
-            except ValueError:
-                continue
+            keep_idx = int(chosen) - 1  # validated upstream by parse_decisions
             seen_names.add(gap.name)
             for occ_idx in gap.occurrences:
                 if occ_idx != keep_idx:
@@ -132,22 +140,34 @@ def _apply(items: list[_Item], decisions: Decisions) -> dict[str, ActionResult]:
         bak = snapshot(pyproject)
         emit_diagnostic(f"wrote {bak.name} (rollback: mv {bak.name} {pyproject.name})")
 
+    deleted_names: set[str] = set()
+
     if pyproject is not None:
         for it in half_sup:
-            result = delete_entry(pyproject, it.detection.name)
+            target_name = it.detection.name
+            result = delete_entry(pyproject, target_name)
             if result.ok:
+                deleted_names.add(target_name)
                 lines = result.lines_removed
                 lines_str = f"{lines[0]}-{lines[1]}" if lines else "?"
                 emit_diagnostic(
                     f"wrote {pyproject.name}: removed [[tool.auntiepypi.servers]] entry "
-                    f"{it.detection.name!r} (lines {lines_str})"
+                    f"{target_name!r} (lines {lines_str})"
                 )
             else:
-                emit_diagnostic(f"could not auto-delete {it.detection.name!r}: {result.reason}")
+                raise AfiError(
+                    code=EXIT_USER_ERROR,
+                    message=f"refused to delete entry {target_name!r}: {result.reason}",
+                    remediation=(
+                        "the block uses inline-table or multi-line-string syntax that the "
+                        "stdlib edit cannot safely parse; remove the entry manually"
+                    ),
+                )
 
         for name, which in duplicate_deletions:
             result = delete_entry(pyproject, name, which=which)
             if result.ok:
+                deleted_names.add(name)
                 lines = result.lines_removed
                 lines_str = f"{lines[0]}-{lines[1]}" if lines else "?"
                 emit_diagnostic(
@@ -155,7 +175,14 @@ def _apply(items: list[_Item], decisions: Decisions) -> dict[str, ActionResult]:
                     f"{name!r} occurrence {which} (lines {lines_str})"
                 )
             else:
-                emit_diagnostic(f"could not auto-delete {name!r} (which={which}): {result.reason}")
+                raise AfiError(
+                    code=EXIT_USER_ERROR,
+                    message=f"refused to delete entry {name!r} (which={which}): {result.reason}",
+                    remediation=(
+                        "the block uses inline-table or multi-line-string syntax that the "
+                        "stdlib edit cannot safely parse; remove the entry manually"
+                    ),
+                )
 
     action_results: dict[str, ActionResult] = {}
     for it in items:
@@ -163,8 +190,12 @@ def _apply(items: list[_Item], decisions: Decisions) -> dict[str, ActionResult]:
             continue
         result = _actions.dispatch(it.detection, it.spec)
         action_results[it.detection.name] = result
+        if result.ok:
+            # Strategy's re-probe confirmed the server is now up. Reflect
+            # that in the item so JSON status and rendered text match fix_ok=true.
+            it.detection = dataclasses.replace(it.detection, status="up")
 
-    return action_results
+    return action_results, deleted_names
 
 
 def _build_items(detections, specs, gaps, decisions: Decisions) -> list[_Item]:
@@ -266,9 +297,11 @@ def _build_payload(
     items: list[_Item],
     applied: bool,
     action_results: dict[str, ActionResult] | None = None,
+    deleted_names: set[str] | None = None,
 ) -> dict[str, object]:
     """Build the output payload; merges apply-time results when provided."""
     action_results = action_results or {}
+    deleted_names = deleted_names or set()
     sections = []
     for it in items:
         fields = [
@@ -299,7 +332,7 @@ def _build_payload(
             if r.pid is not None:
                 fields.append({"name": "pid", "value": str(r.pid)})
 
-        if applied and it.action_class == "half_supervised":
+        if it.detection.name in deleted_names:
             fields.append({"name": "deleted", "value": "true"})
 
         sections.append(

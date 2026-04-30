@@ -57,3 +57,23 @@ def test_stale_decision_value_silently_ignored():
     is parsed without error; callers' for_key() lookups stay idempotent."""
     d = parse_decisions(["duplicate:main=1"])
     assert d.for_key("duplicate", "main") == "1"
+
+
+def test_parse_decisions_duplicate_value_must_be_int():
+    with pytest.raises(AfiError) as excinfo:
+        parse_decisions(["duplicate:main=abc"])
+    assert excinfo.value.code == 1
+    assert "positive integer" in excinfo.value.message
+
+
+def test_parse_decisions_duplicate_value_must_be_positive():
+    with pytest.raises(AfiError) as excinfo:
+        parse_decisions(["duplicate:main=0"])
+    assert excinfo.value.code == 1
+    assert "1" in excinfo.value.message  # mentions the >= 1 lower bound
+
+
+def test_parse_decisions_duplicate_value_negative_rejected():
+    with pytest.raises(AfiError) as excinfo:
+        parse_decisions(["duplicate:main=-2"])
+    assert excinfo.value.code == 1
