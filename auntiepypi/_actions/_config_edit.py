@@ -11,7 +11,10 @@ session, before any edit.
 
 from __future__ import annotations
 
+import contextlib
+import os
 import re
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -116,11 +119,30 @@ def delete_entry(pyproject: Path, name: str, *, which: int = 0) -> DeleteResult:
         end += 1
 
     new_lines = lines[:start] + lines[end:]
-    # `pyproject` is validated by _validate_pyproject_path() at function entry:
-    # the resolved path to a real file named "pyproject.toml". Not user-controlled
-    # in the data-flow sense S2083 targets — comes from find_pyproject()'s CWD walk.
-    pyproject.write_text("".join(new_lines))  # NOSONAR pythonsecurity:S2083
+    _atomic_write_pyproject(pyproject, "".join(new_lines))
     return DeleteResult(ok=True, lines_removed=(start + 1, end))
+
+
+def _atomic_write_pyproject(pyproject: Path, content: str) -> None:
+    """Atomically replace `pyproject.toml` with `content`.
+
+    Writes to a sibling tempfile then ``os.replace``s it onto the target. The
+    target path is reconstructed from its validated parent + literal name so
+    no caller-controlled value flows into the write site (defends against
+    SonarCloud S2083's path-traversal taint analysis even though the validator
+    at function entry already canonicalizes the path).
+    """
+    parent = pyproject.parent.resolve()
+    target = parent / "pyproject.toml"
+    fd, tmp_path = tempfile.mkstemp(prefix=".pyproject.", suffix=".tmp", dir=str(parent))
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(content)
+        os.replace(tmp_path, target)
+    except OSError:
+        with contextlib.suppress(OSError):
+            os.unlink(tmp_path)
+        raise
 
 
 def _find_block_end(lines: list[str], start: int, n: int) -> int:
