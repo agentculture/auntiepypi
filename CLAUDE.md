@@ -2,20 +2,21 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Status: v0.3.0 — `auntie overview` detection landed (the v0.2.0 milestone)
+## Status: v0.4.0 — `doctor` lifecycle landed
 
-Semver shipped as 0.3.0 because 0.2.0 was burned on the
-`agentpypi → auntiepypi` rename PR. The spec and brainstorm artifacts
-under `docs/superpowers/` refer to this work as the **v0.2.0 milestone**.
+`auntie doctor` is now a managed_by-aware lifecycle dispatcher. The
+old `--fix` flag is replaced by `--apply`; `_probes/` is deleted and
+doctor consumes `_detect/` directly. A new `_actions/` module provides
+two dispatch strategies: `systemd-user` (starts/stops a systemd user
+unit) and `command` (runs an arbitrary shell command). Before any
+`pyproject.toml` mutation, a numbered `.bak` snapshot is written
+(`pyproject.toml.1.bak`, `pyproject.toml.2.bak`, …). The `packages`
+noun is permanently removed — use `auntie overview <PKG>` instead.
+Ambiguous duplicate-name entries are resolved via
+`--decide=duplicate:NAME=N`.
 
-The CLI binary renamed `auntiepypi` → `auntie` (with `auntiepypi` kept
-as an alias console script). The composite `auntie overview` server
-section now reads from a new `_detect/` module: declared inventory in
-`[[tool.auntiepypi.servers]]`, default-port scanning of 3141 / 8080,
-and an opt-in `--proc` (Linux) walker that ties processes to listening
-ports. Read-only, stdlib-only HTTP, informational (not gating).
-`_probes/` and `doctor --fix` are deliberately untouched; v0.3.0
-unifies them with serve / lifecycle work.
+See `docs/superpowers/specs/2026-04-30-auntiepypi-v0.4.0-doctor-lifecycle-design.md`
+for the full design rationale.
 
 This file describes the repository **as it exists on disk today**. When
 you edit, keep claims grounded in checked-in reality; the moment a
@@ -110,23 +111,22 @@ otherwise.
 
 ## CLI shape
 
-Agent-first, mostly flat verbs with one noun (`packages`):
+Flat verbs; no noun groups:
 
 ```text
 auntie <verb> [args] [--json]
-auntie packages overview [PKG] [--json]
 ```
 
 Both `auntie` and `auntiepypi` are registered console scripts pointing
 at the same `auntiepypi.cli:main`.
 
-Active verbs registered at v0.2.0:
+Active verbs registered at v0.4.0:
 
 - `auntie learn` (and `learn --json`) — self-teaching prompt generated
   from the `auntiepypi/explain/catalog.py` catalog so it can never
   describe a verb that isn't registered.
 - `auntie explain <path>` — markdown for any noun or verb. There are no
-  `status: planned` entries any more (`learn`'s `planned[]` is `[]`).
+  `status: planned` entries (`learn`'s `planned[]` is `[]`).
 - `auntie overview [TARGET] [--proc] [--json]` — composite of packages
   plus detected servers. The servers section comes from `_detect/`:
   declared inventory (`[[tool.auntiepypi.servers]]`), default-port scan
@@ -135,24 +135,28 @@ Active verbs registered at v0.2.0:
   configured package, in that priority. JSON shape is
   `{"subject", "sections": [...]}`. Read-only. Unknown TARGET → exit 0
   with a stderr warning + zero-target report. Malformed
-  `[[tool.auntiepypi.servers]]` → exit 1.
-- `auntie packages overview [PKG] [--json]` — read-only PyPI maturity
-  dashboard. Without PKG: one row per package in
-  `[tool.auntiepypi].packages`. With PKG: deep-dive showing all seven
-  maturity signals.
-- `auntie doctor [--fix] [--json]` — same `_probes/` machinery as
-  v0.0.1 plus diagnoses; with `--fix`, runs each probe's
-  `start_command` and re-probes. Exits `2` only when `--fix` was
-  attempted and any server is still not up after the re-probe.
-  v0.3.0 will unify this with the new serve work.
+  `[[tool.auntiepypi.servers]]` → exit 1. Use `auntie overview <PKG>`
+  for package deep-dives (the former `auntie packages overview` noun
+  group is removed).
+- `auntie doctor [TARGET] [--apply] [--decide=TYPE:KEY=VAL] [--json]` —
+  managed_by-aware lifecycle dispatcher. Without `--apply`: diagnoses
+  servers (actionable, half-supervised, skip, ambiguous) and prints a
+  dry-run report. With `--apply`: dispatches `_actions/` strategies
+  (`systemd-user` or `command`) for actionable entries, deletes
+  half-supervised declarations after writing a numbered
+  `pyproject.toml.<N>.bak` snapshot. `--decide=duplicate:NAME=N`
+  resolves a duplicate-name ambiguity before acting. TARGET drills into
+  one server. Exits `2` when `--apply` was attempted and any actionable
+  server is still down after re-probe.
 - `auntie whoami [--json]` — auth/env probe; reads `$PIP_INDEX_URL` /
   `$UV_INDEX_URL` env vars and pip's global config file. Exact paths
   inspected live in `auntiepypi/cli/_commands/whoami.py`.
 
-No nouns are catalog-known but unregistered; the earlier `local` noun
-has been permanently dropped, and a `servers` noun was rejected during
-v0.2.0's brainstorm in favour of surfacing detection through
-`auntie overview`.
+No nouns are catalog-known but unregistered. The `packages` noun is
+permanently removed (use `auntie overview <PKG>`), the earlier `local`
+noun was permanently dropped in v0.2.0, and a `servers` noun was
+rejected during v0.2.0's brainstorm in favour of surfacing detection
+through `auntie overview`.
 
 ## Roadmap discipline
 
@@ -170,30 +174,30 @@ originally sketched. That decision is captured in
 
 ## Roadmap (high-level, agent-readable)
 
-1. **v0.0.1 — package skeleton.** `pyproject.toml`, top-level package,
-   argparse `main()` with `learn` / `explain` / `whoami`, tests for
-   `--version` and `learn --json`, CI `tests.yml`. Joins the mesh
-   (`culture.yaml`) and gets `pypi` / `testpypi` GH Environments via `ghafi`.
-2. **v0.1.0 — packages overview (shipped; read-only: dashboard + maturity
-   rubric).** `auntie packages overview [PKG]` — PyPI maturity
-   dashboard across configured packages. Top-level `overview` promoted to
-   composite (packages + server probes). Release orchestration
-   (`online release SIBLING --apply`) explicitly deferred to a later
-   milestone.
-3. **v0.2.0 — `auntie overview` detection (shipped).** `_detect/` plugin
-   module: declared inventory (`[[tool.auntiepypi.servers]]`), default
-   port-scan, opt-in `/proc` walker. CLI binary rename `auntiepypi` →
-   `auntie` (with `auntiepypi` kept as an alias). systemd-user unit
-   templates in `docs/deploy/`. Detect-only; no lifecycle verbs.
-   `_probes/` and `doctor --fix` deliberately untouched.
-4. **v0.3.0 — serve / lifecycle.** Bring in the ability to actually
-   start and stop a PyPI server (or run our own). Verb shape decided in
-   v0.3.0's brainstorm: most likely either expanding `doctor`
-   (`doctor --start`, `doctor --serve`) or adding a top-level verb. Will
-   *not* introduce a `local` noun. Unifies `doctor --fix`'s raise
-   capability with the new serve work and resolves the v0.2.0 redundancy
-   where `_probes/` and `_detect/` both exist.
-5. **v1.0.0 — mesh-aware.** Local index discoverable via Culture-mesh
+Semver note: the spec calls milestones v0.1.0/v0.2.0/v0.3.0/v0.4.0,
+but actual semver tags are shifted by one minor because 0.2.0 was
+burned on the `agentpypi → auntiepypi` rename. The table below uses
+**semver** labels to avoid confusion.
+
+1. **semver 0.0.1 — package skeleton (shipped).** `pyproject.toml`, top-level
+   package, argparse `main()` with `learn` / `explain` / `whoami`, tests,
+   CI `tests.yml`. Joins the mesh (`culture.yaml`).
+2. **semver 0.1.0 — packages overview (shipped).** `auntie packages overview
+   [PKG]` — PyPI maturity dashboard. `auntie overview` promoted to composite
+   (packages + server probes). Release orchestration deferred.
+3. **semver 0.3.0 — `auntie overview` detection (shipped).** `_detect/` plugin
+   module: declared inventory, default port-scan, opt-in `/proc` walker. CLI
+   binary rename `auntiepypi` → `auntie`. systemd-user unit templates in
+   `docs/deploy/`. Detect-only; no lifecycle verbs.
+4. **semver 0.4.0 — doctor lifecycle (shipped).** `_actions/` module with
+   `systemd-user` + `command` strategies; `--fix` renamed to `--apply`;
+   `--decide` registry; `packages` noun removed; `_probes/` removed.
+   Numbered `.bak` snapshots before any `pyproject.toml` mutation. See spec
+   `docs/superpowers/specs/2026-04-30-auntiepypi-v0.4.0-doctor-lifecycle-design.md`.
+5. **semver 0.5.0 — own server + lifecycle commands.** `auntie up` / `auntie
+   down` / `auntie restart`; PID-file tracking; first-party PEP 503
+   simple-index for mesh-private use. HTTPS surface introduced here.
+6. **semver 1.0.0 — mesh-aware.** Local index discoverable via Culture-mesh
    service registry; trust boundary documented in `docs/threat-model.md`.
 
 This roadmap is descriptive of intent, not a commitment. Reorder or
