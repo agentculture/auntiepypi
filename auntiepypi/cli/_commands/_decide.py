@@ -67,7 +67,7 @@ def parse_decisions(raw: list[str]) -> Decisions:
                 code=EXIT_USER_ERROR,
                 message=f"--decide: malformed value {item!r}",
                 remediation=(
-                    "format: --decide=<kind>:<name>=<value>" " (e.g. --decide=duplicate:main=1)"
+                    "format: --decide=<kind>:<name>=<value> (e.g. --decide=duplicate:main=1)"
                 ),
             )
         lhs, value = item.split("=", 1)
@@ -76,7 +76,7 @@ def parse_decisions(raw: list[str]) -> Decisions:
                 code=EXIT_USER_ERROR,
                 message=f"--decide: malformed key {lhs!r}",
                 remediation=(
-                    "format: --decide=<kind>:<name>=<value>" " (e.g. --decide=duplicate:main=1)"
+                    "format: --decide=<kind>:<name>=<value> (e.g. --decide=duplicate:main=1)"
                 ),
             )
         kind, name = lhs.split(":", 1)

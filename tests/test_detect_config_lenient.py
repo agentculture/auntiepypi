@@ -54,7 +54,7 @@ managed_by = "systemd-user"
 """,
     )
     cfg, gaps = load_servers_lenient(start=start)
-    assert len(cfg.specs) == 1
+    assert len(cfg.specs) == 1  # spec is still loaded; gap is informational
     assert len(gaps) == 1
     assert isinstance(gaps[0], ConfigGap)
     assert gaps[0].kind == "missing-companion"
@@ -74,6 +74,7 @@ managed_by = "command"
 """,
     )
     cfg, gaps = load_servers_lenient(start=start)
+    assert len(cfg.specs) == 1  # spec is still loaded; gap is informational
     assert len(gaps) == 1
     assert gaps[0].kind == "missing-companion"
     assert "command" in gaps[0].detail
@@ -97,6 +98,7 @@ managed_by = "manual"
 """,
     )
     cfg, gaps = load_servers_lenient(start=start)
+    assert len(cfg.specs) == 2  # both specs loaded; duplicate is informational
     dup_gaps = [g for g in gaps if g.kind == "duplicate"]
     assert len(dup_gaps) == 1
     assert dup_gaps[0].name == "main"
@@ -115,6 +117,7 @@ managed_by = "manual"
 """,
     )
     cfg, gaps = load_servers_lenient(start=start)
+    assert len(cfg.specs) == 1  # spec is still loaded even with no companions required
     assert gaps == []
 
 
@@ -129,6 +132,7 @@ port = 8080
 """,
     )
     cfg, gaps = load_servers_lenient(start=start)
+    assert len(cfg.specs) == 1  # spec is still loaded when managed_by is unset
     assert gaps == []
 
 

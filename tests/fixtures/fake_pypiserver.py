@@ -18,7 +18,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         self.wfile.write(b"<html><body><a href='pkg/'>pkg</a></body></html>")
 
     def log_message(self, *a, **kw):
-        pass
+        """Silence access logs for test runs (fake server is hermetic)."""
+        del a, kw
 
 
 def main() -> None:

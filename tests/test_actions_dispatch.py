@@ -38,6 +38,7 @@ def test_dispatch_routes_systemd_user(monkeypatch):
     )
     result = _actions.dispatch(_det(), spec)
     assert result.ok is True
+    assert len(called) == 1, f"expected exactly one call, got {called!r}"
     assert called[0][0] == "systemd-user"
 
 
@@ -57,8 +58,9 @@ def test_dispatch_routes_command(monkeypatch):
         command=("echo",),
     )
     result = _actions.dispatch(_det(), spec)
-    assert called == ["command"]
     assert result.ok is True
+    assert len(called) == 1, f"expected exactly one call, got {called!r}"
+    assert called == ["command"]
 
 
 def test_dispatch_docker_returns_not_implemented():
