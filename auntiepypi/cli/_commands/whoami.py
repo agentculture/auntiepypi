@@ -98,7 +98,7 @@ def _load_servers_silent() -> ServersConfig:
     try:
         return load_servers()
     except ServerConfigError:
-        return ServersConfig(servers=[], scan_processes=False)
+        return ServersConfig(scan_processes=False)
 
 
 def _local_indexes_seen() -> list[dict[str, object]]:
