@@ -61,10 +61,9 @@ def test_command_happy_path(tmp_path, monkeypatch):
     finally:
         if result and result.pid:
             try:
-                # NOSONAR python:S4828 — test cleanup signal targeting a child we
-                # ourselves spawned in this test (PID captured from Popen above);
-                # not arbitrary signal injection.
-                os.killpg(os.getpgid(result.pid), signal.SIGTERM)  # nosec B603
+                # Test cleanup signal targeting a child we ourselves spawned (PID
+                # captured from Popen above); not arbitrary signal injection.
+                os.killpg(os.getpgid(result.pid), signal.SIGTERM)  # NOSONAR python:S4828
             except ProcessLookupError:
                 pass
 
@@ -102,10 +101,9 @@ def test_command_spawns_but_never_binds(tmp_path, monkeypatch):
     finally:
         if result and result.pid:
             try:
-                # NOSONAR python:S4828 — test cleanup signal targeting a child we
-                # ourselves spawned in this test (PID captured from Popen above);
-                # not arbitrary signal injection.
-                os.killpg(os.getpgid(result.pid), signal.SIGTERM)  # nosec B603
+                # Test cleanup signal targeting a child we ourselves spawned (PID
+                # captured from Popen above); not arbitrary signal injection.
+                os.killpg(os.getpgid(result.pid), signal.SIGTERM)  # NOSONAR python:S4828
             except ProcessLookupError:
                 pass
 

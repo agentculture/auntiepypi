@@ -147,6 +147,12 @@ def _format_lines(lines_removed: tuple[int, int] | None) -> str:
     return f"{lines_removed[0]}-{lines_removed[1]}" if lines_removed else "?"
 
 
+_DELETE_REFUSAL_REMEDIATION = (
+    "the block uses inline-table or multi-line-string syntax that the "
+    "stdlib edit cannot safely parse; remove the entry manually"
+)
+
+
 def _execute_deletions(
     pyproject: Path,
     half_sup_names: list[str],
@@ -156,43 +162,39 @@ def _execute_deletions(
 
     Returns the set of names that were successfully deleted.
     """
+    # Unify the two deletion lists: ``which=None`` means half-supervised
+    # (delete first match); ``which=int`` means duplicate occurrence index.
+    targets: list[tuple[str, int | None]] = [(name, None) for name in half_sup_names]
+    targets.extend((name, which) for name, which in duplicate_dels)
+
     deleted: set[str] = set()
-
-    for name in half_sup_names:
-        result = delete_entry(pyproject, name)
-        if not result.ok:
-            raise AfiError(
-                code=EXIT_USER_ERROR,
-                message=f"refused to delete entry {name!r}: {result.reason}",
-                remediation=(
-                    "the block uses inline-table or multi-line-string syntax that the "
-                    "stdlib edit cannot safely parse; remove the entry manually"
-                ),
-            )
+    for name, which in targets:
+        _execute_one_deletion(pyproject, name, which)
         deleted.add(name)
-        emit_diagnostic(
-            f"wrote {pyproject.name}: removed [[tool.auntiepypi.servers]] entry "
-            f"{name!r} (lines {_format_lines(result.lines_removed)})"
-        )
-
-    for name, which in duplicate_dels:
-        result = delete_entry(pyproject, name, which=which)
-        if not result.ok:
-            raise AfiError(
-                code=EXIT_USER_ERROR,
-                message=f"refused to delete entry {name!r} (which={which}): {result.reason}",
-                remediation=(
-                    "the block uses inline-table or multi-line-string syntax that the "
-                    "stdlib edit cannot safely parse; remove the entry manually"
-                ),
-            )
-        deleted.add(name)
-        emit_diagnostic(
-            f"wrote {pyproject.name}: removed [[tool.auntiepypi.servers]] entry "
-            f"{name!r} occurrence {which} (lines {_format_lines(result.lines_removed)})"
-        )
-
     return deleted
+
+
+def _execute_one_deletion(pyproject: Path, name: str, which: int | None) -> None:
+    """Run a single ``delete_entry`` and emit the audit line; raise on refusal."""
+    if which is None:
+        result = delete_entry(pyproject, name)
+        descriptor = f"{name!r}"
+        which_msg = ""
+    else:
+        result = delete_entry(pyproject, name, which=which)
+        descriptor = f"{name!r} occurrence {which}"
+        which_msg = f" (which={which})"
+
+    if not result.ok:
+        raise AfiError(
+            code=EXIT_USER_ERROR,
+            message=f"refused to delete entry {name!r}{which_msg}: {result.reason}",
+            remediation=_DELETE_REFUSAL_REMEDIATION,
+        )
+    emit_diagnostic(
+        f"wrote {pyproject.name}: removed [[tool.auntiepypi.servers]] entry "
+        f"{descriptor} (lines {_format_lines(result.lines_removed)})"
+    )
 
 
 def _dispatch_actionable(items: list[_Item]) -> dict[str, ActionResult]:

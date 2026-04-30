@@ -24,9 +24,9 @@ class _Handler(http.server.BaseHTTPRequestHandler):
 
 def main() -> None:
     port = int(sys.argv[1])
-    # NOSONAR python:S5332 — localhost-only test fixture; HTTPS would require a
-    # cert dance for no real benefit (the server only ever serves 127.0.0.1).
-    srv = http.server.ThreadingHTTPServer(("127.0.0.1", port), _Handler)  # nosec B104
+    # localhost-only test fixture; HTTPS would require a cert dance for no real
+    # benefit (the server only ever serves 127.0.0.1).
+    srv = http.server.ThreadingHTTPServer(("127.0.0.1", port), _Handler)  # NOSONAR python:S5332
     srv.serve_forever()
 
 
