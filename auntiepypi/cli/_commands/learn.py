@@ -36,12 +36,10 @@ Commands
                                configured package. --proc opts into a
                                /proc-based scan (Linux). Read-only.
                                Supports --json.
-  auntie packages overview [PKG]
-                               Read-only PyPI maturity dashboard or
-                               per-package deep-dive. Informational,
-                               not gating. Supports --json.
-  auntie doctor [--fix]        Same probes as v0.0.1 plus diagnoses; with
-                               --fix, start configured servers. Default
+  auntie doctor [TARGET]       Probe + diagnose declared inventory; with
+    [--apply]                  --apply, starts servers and deletes half-
+    [--decide KEY=VALUE]       supervised entries. --decide resolves
+                               ambiguous cases (duplicate names). Default
                                is dry-run. Supports --json.
   auntie whoami                Auth/env probe — which PyPI / TestPyPI /
                                local index is the active environment
@@ -50,13 +48,17 @@ Commands
 Configuration
 -------------
   pyproject.toml [tool.auntiepypi]
-    packages = [...]                      # for `auntie packages overview`
+    packages = [...]                      # for overview package sections
     scan_processes = false                # opt into /proc scan; same as --proc
 
   pyproject.toml [[tool.auntiepypi.servers]]   # one block per server
     name = "main"
     flavor = "pypiserver"                 # | "devpi" | "unknown"
     port = 8080
+    managed_by = "systemd-user"          # | "command" | "manual" | (unset)
+    unit = "pypi-server.service"         # required for managed_by=systemd-user
+    command = ["pypi-server", "run", "-p", "8080", "/srv/wheels"]
+                                         # required for managed_by=command
 
 The CLI registers two console scripts: `auntie` (preferred) and
 `auntiepypi` (alias).
@@ -69,10 +71,10 @@ mixed.
 
 Exit-code policy
 ----------------
-  0 success
-  1 user-input error (bad flag, bad path, missing arg)
-  2 environment / setup error
-  3+ reserved
+  0 success / dry-run / ambiguous --decide deferred / unknown TARGET
+  1 configuration or usage error (cross-field validation, unknown --decide key,
+    unparseable block, .bak slot exhaustion)
+  2 --apply ran but at least one actionable server is still not up
 
 More detail
 -----------
@@ -101,12 +103,11 @@ def _as_json_payload() -> dict[str, object]:
                 ),
             },
             {
-                "path": ["packages", "overview"],
-                "summary": "PyPI maturity dashboard or per-package deep-dive.",
-            },
-            {
                 "path": ["doctor"],
-                "summary": "Probe + diagnose local PyPI servers; with --fix, start them.",
+                "summary": (
+                    "Diagnose declared inventory; --apply to act (start servers, "
+                    "delete half-supervised). Use --decide for ambiguous duplicates."
+                ),
             },
             {
                 "path": ["whoami"],
@@ -115,9 +116,9 @@ def _as_json_payload() -> dict[str, object]:
         ],
         "planned": [],
         "exit_codes": {
-            "0": "success",
-            "1": "user-input error",
-            "2": "environment/setup error",
+            "0": "success / dry-run / ambiguous --decide deferred / unknown TARGET",
+            "1": "configuration or usage error",
+            "2": "--apply ran but at least one actionable server is still not up",
         },
         "json_support": True,
         "explain_pointer": "auntie explain <path>",

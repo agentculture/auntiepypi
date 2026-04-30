@@ -40,10 +40,10 @@ def test_learn_json_parseable(capsys: pytest.CaptureFixture[str]) -> None:
     assert payload["package"] == "auntiepypi"
     assert payload["version"] == __version__
     assert payload["json_support"] is True
-    assert payload["exit_codes"]["0"] == "success"
+    assert payload["exit_codes"]["0"].startswith("success")
     paths = {tuple(c["path"]) for c in payload["commands"]}
     assert {("learn",), ("explain",), ("overview",), ("doctor",), ("whoami",)} <= paths
-    # v0.2.0: `planned` is empty — `local` noun dropped, `servers` not added.
+    # v0.4.0: `planned` is empty — `packages` noun dropped, `_probes/` deleted.
     assert payload["planned"] == []
 
 
@@ -153,19 +153,23 @@ def test_explain_known_paths() -> None:
     assert any("learn" in p for p in paths)
 
 
-def test_catalog_has_packages_entry():
+def test_catalog_drops_packages_noun():
+    """v0.4.0: `packages` noun and `packages overview` are permanently removed from the catalog."""
     from auntiepypi.explain.catalog import ENTRIES
 
-    assert ("packages",) in ENTRIES
-    assert ("packages", "overview") in ENTRIES
+    assert ("packages",) not in ENTRIES
+    assert ("packages", "overview") not in ENTRIES
     assert ("online",) not in ENTRIES
 
 
-def test_catalog_root_mentions_packages_overview():
+def test_catalog_root_mentions_doctor_apply():
+    """v0.4.0: root entry describes `--apply` (not `--fix`) and no packages noun."""
     from auntiepypi.explain.catalog import ENTRIES
 
     root = ENTRIES[("auntiepypi",)]
-    assert "auntie packages overview" in root
+    assert "--apply" in root
+    assert "auntie packages overview" not in root
+    assert "--fix" not in root
 
 
 def test_catalog_drops_local_noun():
@@ -183,7 +187,8 @@ def test_catalog_supports_auntie_alias():
     assert ENTRIES[("auntie",)] == ENTRIES[("auntiepypi",)]
 
 
-def test_learn_json_drops_online_adds_packages():
+def test_learn_json_v0_4_0_surface():
+    """v0.4.0: packages/overview gone; doctor uses --apply; planned is empty."""
     import contextlib
     from io import StringIO
 
@@ -195,6 +200,12 @@ def test_learn_json_drops_online_adds_packages():
     assert rc == 0
     payload = json.loads(buf.getvalue())
     paths = [tuple(c["path"]) for c in payload["commands"]]
-    assert ("packages", "overview") in paths
-    # planned is empty in v0.2.0
+    # packages/overview is gone in v0.4.0
+    assert ("packages", "overview") not in paths
+    # doctor is still present
+    assert ("doctor",) in paths
+    # planned is empty
     assert payload["planned"] == []
+    # doctor summary mentions --apply
+    doctor_entry = next(c for c in payload["commands"] if c["path"] == ["doctor"])
+    assert "--apply" in doctor_entry["summary"]

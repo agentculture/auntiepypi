@@ -26,9 +26,9 @@ locally. Informational, not gating.
   local servers. With TARGET, drills into a detection name, bare flavor
   alias (`devpi` / `pypiserver`), or configured package. `--proc` opts
   into a /proc scan (Linux only).
-- `auntie packages overview [PKG]` — read-only PyPI maturity dashboard
-  (no arg) or per-package deep-dive (with arg).
-- `auntie doctor [--fix]` — probe + diagnose; `--fix` starts servers.
+- `auntie doctor [TARGET] [--apply] [--decide KEY=VALUE] [--json]` —
+  probe + diagnose declared inventory; `--apply` starts servers and
+  deletes half-supervised entries; `--decide` resolves ambiguous cases.
 - `auntie whoami` — auth/env probe; reports configured indexes.
 
 ## Console scripts
@@ -50,8 +50,6 @@ The package installs two scripts that point at the same entry point:
 - `auntie explain learn`
 - `auntie explain explain`
 - `auntie explain overview`
-- `auntie explain packages`
-- `auntie explain packages overview`
 - `auntie explain doctor`
 - `auntie explain whoami`
 """
@@ -102,8 +100,7 @@ bare flavor alias, or configured package, in that priority.
 
 - **Declared inventory** — `[[tool.auntiepypi.servers]]` in pyproject.toml.
   Probes each declared host:port; carries `managed_by` / `unit` /
-  `dockerfile` / etc. through to the JSON envelope (reserved for v0.3.0
-  lifecycle work).
+  `dockerfile` / etc. through to the JSON envelope.
 - **Default port scan** — probes `127.0.0.1:3141` (devpi) and
   `127.0.0.1:8080` (pypiserver), skipping any (host, port) already
   covered by declarations. When declarations exist, `absent` results
@@ -144,8 +141,8 @@ bare flavor alias, or configured package, in that priority.
 ## Remediation for `status: absent`
 
 See `docs/deploy/` for systemd-user unit templates that run pypiserver /
-devpi as background services. `auntie` does not start servers itself
-(see `auntie doctor --fix` for the existing raise capability).
+devpi as background services. Use `auntie doctor --apply` to start
+declared servers.
 
 ## Exit codes
 
@@ -157,22 +154,66 @@ devpi as background services. `auntie` does not start servers itself
 _DOCTOR = """\
 # auntie doctor
 
-Same probes as `overview`, plus per-server diagnoses (`port in use`,
-`unexpected response`, `server not installed`). Default is dry-run: prints
-the would-be remediation command. With `--fix`, runs each server's
-configured `start_command`.
+Detects the declared inventory (via `_detect/`), then adds per-server
+diagnoses (`port in use`, `unexpected response`, `server not installed`,
+`half-supervised`, `ambiguous`). Default is dry-run: prints the
+would-be remediation for each entry.
+
+With `--apply`, doctor acts on each actionable entry:
+
+- **actionable** — declared, status ≠ up, strategy implemented
+  (`systemd-user` or `command`): spawns the server, then re-probes
+  within 5 s.
+- **half-supervised** — `managed_by` set but required companion field
+  missing (e.g. `managed_by=systemd-user` without `unit`): deletes the
+  whole `[[tool.auntiepypi.servers]]` entry from `pyproject.toml`.
+  A numbered `.bak` file is written before any mutation.
+- **ambiguous** — duplicate `name` values: `--apply` without `--decide`
+  prints instructions and exits `0`; with `--decide`, deletes the
+  non-kept entry.
+- **skip** — `manual`, unset `managed_by`, unimplemented strategies
+  (`docker` / `compose`), undeclared scan-found: passed through
+  unchanged.
+
+## TARGET drill-down
+
+With a positional `TARGET`, doctor filters to the single declared entry
+whose `name` matches. Unknown TARGET → stderr warning + exit `0`
+(mirrors `overview` zero-target behavior).
+
+## `--decide`
+
+Resolves ambiguous cases. Repeatable. v0.4.0 ships one decision type:
+
+    --decide=duplicate:NAME=N    # keep the Nth occurrence (1-based)
+
+Unknown decision keys exit `1` with the list of known types. Stale
+decisions (ambiguity no longer present) are silently ignored so
+re-runs stay idempotent.
+
+## Backups
+
+Before any mutation, doctor writes `pyproject.toml.<N>.bak` (next free
+numbered slot). On `.bak` slot exhaustion (> 5 retries): exits `1` with
+a remediation hint to clean up old `.bak` files.
 
 ## Usage
 
-    auntie doctor                # dry-run; no mutations
-    auntie doctor --fix          # start any server reporting `down`
-    auntie doctor --json
-    auntie doctor --fix --json
+    auntie doctor                                  # dry-run; explain everything
+    auntie doctor main                             # drill into one entry
+    auntie doctor --apply                          # commit; spawns + deletes half-supervised
+    auntie doctor --apply --decide=duplicate:main=1
+    auntie doctor --json                           # for piping to jq
 
 ## Exit codes
 
-- `0` all servers healthy (or `--fix` brought every reporting `down` server up).
-- `2` a `--fix` attempt failed (e.g. `start_command` not on `$PATH`).
+- `0` — dry-run completed; `--apply` brought every actionable server
+  up; ambiguous cases deferred via `--decide`; unknown TARGET (stderr
+  warning).
+- `1` — configuration / usage error (cross-field validation, unknown
+  `--decide` key, unparseable block, `.bak` slot exhaustion).
+- `2` — `--apply` ran but at least one actionable entry is still not
+  `up` after the strategy + re-probe.
 """
 
 _WHOAMI = """\
@@ -199,59 +240,6 @@ probe machinery `overview` uses to flag local indexes that are
 Read-only.
 """
 
-_PACKAGES = """\
-# auntie packages
-
-Read-only verbs against PyPI for the configured set of packages.
-
-The configured set lives in `pyproject.toml`:
-
-    [tool.auntiepypi]
-    packages = ["pkg-a", "pkg-b"]
-
-## Verbs
-
-- `auntie packages overview` — dashboard over all configured packages.
-- `auntie packages overview <pkg>` — deep-dive over the rubric for one.
-
-Read-only by design. Reports — never gates. Exit code is `0` regardless
-of how many packages roll up `red`.
-"""
-
-_PACKAGES_OVERVIEW = """\
-# auntie packages overview
-
-Roll-up dashboard over the configured package list, or per-package
-deep-dive when called with an argument.
-
-## Usage
-
-    auntie packages overview            # dashboard
-    auntie packages overview <pkg>      # deep-dive
-    auntie packages overview --json
-    auntie packages overview <pkg> --json
-
-## Rubric (deep-dive)
-
-Seven dimensions, each scored pass / warn / fail / unknown, rolled up
-to a green / yellow / red / unknown traffic light:
-
-- recency — days since last non-yanked release
-- cadence — median gap between last 5 releases
-- downloads — pypistats `last_week`
-- lifecycle — Trove `Development Status` classifier
-- distribution — wheel + sdist availability
-- metadata — license / requires_python / Homepage / Source / README
-- versioning — PEP 440 maturity
-
-## Exit codes
-
-- `0` always (read-only; reds do not change the exit).
-- `1` on missing config (no `[tool.auntiepypi].packages`) or invalid name.
-- `2` only if every fetch failed.
-"""
-
-
 ENTRIES: dict[tuple[str, ...], str] = {
     (): _ROOT,
     ("auntiepypi",): _ROOT,
@@ -261,6 +249,4 @@ ENTRIES: dict[tuple[str, ...], str] = {
     ("overview",): _OVERVIEW,
     ("doctor",): _DOCTOR,
     ("whoami",): _WHOAMI,
-    ("packages",): _PACKAGES,
-    ("packages", "overview"): _PACKAGES_OVERVIEW,
 }
