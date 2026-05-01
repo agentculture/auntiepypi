@@ -62,10 +62,14 @@ Configuration
     packages = [...]                      # for overview package sections
     scan_processes = false                # opt into /proc scan; same as --proc
 
-  pyproject.toml [tool.auntiepypi.local]  # first-party PEP 503 server (v0.6.0)
-    host = "127.0.0.1"                    # loopback only in v0.6.0
+  pyproject.toml [tool.auntiepypi.local]  # first-party PEP 503 server
+    host = "127.0.0.1"                    # loopback default; non-loopback
+                                          # requires cert+key+htpasswd (v0.7.0)
     port = 3141                           # default
     root = "~/.local/share/auntiepypi/wheels"  # wheelhouse directory
+    cert = "/etc/ssl/auntie.pem"          # v0.7.0: HTTPS termination
+    key  = "/etc/ssl/auntie.key"          # v0.7.0: paired with cert
+    htpasswd = "/etc/auntie/htpasswd"     # v0.7.0: Basic-auth, bcrypt-only
 
   pyproject.toml [[tool.auntiepypi.servers]]   # one block per declared server
     name = "main"                         # "auntie" is reserved
