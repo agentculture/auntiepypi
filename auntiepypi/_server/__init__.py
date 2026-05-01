@@ -1,17 +1,23 @@
 """auntiepypi's first-party PEP 503 simple-index server.
 
-v0.6.0 ships the read-only slice: serves wheels and sdists from a
-filesystem wheelhouse. Loopback-only by config-load-time enforcement.
-``auntie publish``, HTTPS, and basic-auth are deferred to v0.7.0.
+v0.6.0 shipped the read-only slice: serves wheels and sdists from a
+filesystem wheelhouse, loopback-only.
+
+v0.7.0 adds optional HTTPS termination (``ssl_context=...``) and HTTP
+Basic auth (``htpasswd_map=...``). When both are configured at
+config-load time, the loopback restriction lifts. ``auntie publish``
+remains deferred to v0.8.0.
 
 Public surface lives in :mod:`auntiepypi._server.__init__` (this
 module). The HTTP layer is :mod:`._app`; filesystem walk lives in
-:mod:`._wheelhouse`; CLI entry is :mod:`.__main__`.
+:mod:`._wheelhouse`; htpasswd parsing in :mod:`._auth`; TLS context
+in :mod:`._tls`; CLI entry is :mod:`.__main__`.
 """
 
 from __future__ import annotations
 
 import signal
+import ssl
 import threading
 from http.server import ThreadingHTTPServer
 from pathlib import Path
@@ -27,15 +33,29 @@ def serve(
     port: int,
     root: Path,
     *,
+    ssl_context: ssl.SSLContext | None = None,
+    htpasswd_map: dict[str, bytes] | None = None,
     server_factory: Callable[..., ThreadingHTTPServer] = ThreadingHTTPServer,
 ) -> None:
-    """Run the simple-index HTTP server until SIGTERM/SIGINT.
+    """Run the simple-index HTTP(S) server until SIGTERM/SIGINT.
+
+    ``ssl_context`` (when set) wraps the listening socket via
+    ``SSLContext.wrap_socket`` after ``bind_and_activate`` and before
+    ``serve_forever`` — the standard idiom for stdlib HTTP+TLS.
+
+    ``htpasswd_map`` (when set) gates every GET through Basic auth
+    (see :mod:`._app`).
 
     ``server_factory`` is a test indirection — production callers
     accept the default ``ThreadingHTTPServer``.
     """
-    handler_cls = make_handler(root)
+    handler_cls = make_handler(root, htpasswd_map=htpasswd_map)
     httpd = server_factory((host, port), handler_cls)
+    if ssl_context is not None:
+        # In-flight TLS connections may log noisy ssl.SSLError on
+        # abrupt shutdown; that's acceptable. server_close() only
+        # closes the listening socket; daemon threads handle in-flight.
+        httpd.socket = ssl_context.wrap_socket(httpd.socket, server_side=True)
 
     def _shutdown(_signum: int, _frame: object) -> None:
         # ``httpd.shutdown()`` blocks until ``serve_forever()`` returns
