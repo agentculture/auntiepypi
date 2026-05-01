@@ -270,13 +270,11 @@ def _is_loopback(host: str) -> bool:
 
 
 def _validate_local_host(host: object) -> str:
+    """Type-only validator. Cross-field loopback rule lives in
+    :func:`_validate_local_lift_rule` so it can read cert/key/htpasswd.
+    """
     if not isinstance(host, str) or not host:
         raise ServerConfigError("[tool.auntiepypi.local] 'host' must be a non-empty string")
-    if not _is_loopback(host):
-        raise ServerConfigError(
-            f"[tool.auntiepypi.local] 'host'={host!r}: v0.6.0 binds loopback "
-            "only (auth + TLS land in v0.7.0). Use 127.0.0.1, localhost, or ::1."
-        )
     return host
 
 
@@ -292,6 +290,53 @@ def _validate_local_root(root: object) -> Path:
     if not isinstance(root, str) or not root:
         raise ServerConfigError("[tool.auntiepypi.local] 'root' must be a non-empty string")
     return Path(root).expanduser()
+
+
+def _validate_local_path_field(value: object, key: str) -> Path:
+    """Type-check + tilde-expand a Path-typed field.
+
+    Does not check file existence — that's a runtime concern. A
+    config-time existence check would surface as a confusing parse
+    error; runtime surfaces as a clear "could not load X: Y" from
+    the strategy.
+    """
+    if not isinstance(value, str) or not value:
+        raise ServerConfigError(
+            f"[tool.auntiepypi.local] {key!r} must be a non-empty string path"
+        )
+    return Path(value).expanduser()
+
+
+def _validate_local_lift_rule(
+    host: str,
+    cert: Path | None,
+    key: Path | None,
+    htpasswd: Path | None,
+) -> None:
+    """Enforce v0.7.0 D4: loopback always ok; non-loopback requires
+    BOTH ``cert+key`` (TLS) AND ``htpasswd`` (auth).
+    """
+    if _is_loopback(host):
+        return
+    missing: list[str] = []
+    if cert is None or key is None:
+        # Name precisely which side(s) are missing for a partial pair;
+        # otherwise the bundle name "cert+key".
+        if cert is None and key is None:
+            missing.append("cert+key")
+        elif cert is None:
+            missing.append("cert")
+        else:
+            missing.append("key")
+    if htpasswd is None:
+        missing.append("htpasswd")
+    if not missing:
+        return
+    raise ServerConfigError(
+        f"[tool.auntiepypi.local] host={host!r} is non-loopback; "
+        "non-loopback binds require BOTH 'cert'+'key' (TLS) AND "
+        f"'htpasswd' (auth). missing: {', '.join(missing)}."
+    )
 
 
 def load_local_config(start: Path | None = None) -> LocalConfig:
@@ -334,6 +379,22 @@ def load_local_config(start: Path | None = None) -> LocalConfig:
         kwargs["root"] = _validate_local_root(local_table["root"])
     else:
         kwargs["root"] = default_root()
+    if "cert" in local_table:
+        kwargs["cert"] = _validate_local_path_field(local_table["cert"], "cert")
+    if "key" in local_table:
+        kwargs["key"] = _validate_local_path_field(local_table["key"], "key")
+    if "htpasswd" in local_table:
+        kwargs["htpasswd"] = _validate_local_path_field(local_table["htpasswd"], "htpasswd")
+
+    # Cross-field: enforce v0.7.0 D4 lift rule. Defaults to loopback
+    # host so the rule never fires when the table is absent or omits
+    # everything except (e.g.) port/root.
+    _validate_local_lift_rule(
+        host=kwargs.get("host", LocalConfig.host),
+        cert=kwargs.get("cert"),
+        key=kwargs.get("key"),
+        htpasswd=kwargs.get("htpasswd"),
+    )
     return LocalConfig(**kwargs)
 
 

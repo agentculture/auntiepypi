@@ -151,7 +151,7 @@ def test_load_local_config_expands_tilde(tmp_path, monkeypatch):
     assert cfg.root == tmp_path / "wheels"
 
 
-def test_load_local_config_rejects_non_loopback(tmp_path):
+def test_load_local_config_rejects_non_loopback_without_tls_or_auth(tmp_path):
     _write_pyproject(
         tmp_path,
         """
@@ -159,11 +159,11 @@ def test_load_local_config_rejects_non_loopback(tmp_path):
         host = "0.0.0.0"
         """,
     )
-    with pytest.raises(ServerConfigError, match="loopback only"):
+    with pytest.raises(ServerConfigError, match="non-loopback binds require BOTH"):
         load_local_config(tmp_path)
 
 
-def test_load_local_config_rejects_public_ip(tmp_path):
+def test_load_local_config_rejects_public_ip_without_tls_or_auth(tmp_path):
     _write_pyproject(
         tmp_path,
         """
@@ -171,7 +171,7 @@ def test_load_local_config_rejects_public_ip(tmp_path):
         host = "10.0.0.5"
         """,
     )
-    with pytest.raises(ServerConfigError, match="loopback only"):
+    with pytest.raises(ServerConfigError, match="non-loopback binds require BOTH"):
         load_local_config(tmp_path)
 
 
@@ -262,3 +262,206 @@ def test_localconfig_full_bundle(tmp_path):
     assert cfg.cert == cert
     assert cfg.key == key
     assert cfg.htpasswd == htp
+
+
+# --------- v0.7.0 cert/key/htpasswd field loading ---------
+
+
+def test_load_local_config_loads_cert_key_htpasswd(tmp_path, monkeypatch):
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
+    cert = tmp_path / "c.pem"
+    key = tmp_path / "k.pem"
+    htp = tmp_path / "htpasswd"
+    _write_pyproject(
+        tmp_path,
+        f"""
+        [tool.auntiepypi.local]
+        cert = "{cert}"
+        key  = "{key}"
+        htpasswd = "{htp}"
+        """,
+    )
+    cfg = load_local_config(tmp_path)
+    assert cfg.cert == cert
+    assert cfg.key == key
+    assert cfg.htpasswd == htp
+    assert cfg.tls_enabled is True
+    assert cfg.auth_enabled is True
+
+
+def test_load_local_config_expands_tilde_in_tls_paths(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
+    _write_pyproject(
+        tmp_path,
+        """
+        [tool.auntiepypi.local]
+        cert = "~/c.pem"
+        key  = "~/k.pem"
+        htpasswd = "~/htpasswd"
+        """,
+    )
+    cfg = load_local_config(tmp_path)
+    assert cfg.cert == tmp_path / "c.pem"
+    assert cfg.key == tmp_path / "k.pem"
+    assert cfg.htpasswd == tmp_path / "htpasswd"
+
+
+def test_load_local_config_rejects_cert_non_string(tmp_path):
+    _write_pyproject(
+        tmp_path,
+        """
+        [tool.auntiepypi.local]
+        cert = 42
+        """,
+    )
+    with pytest.raises(ServerConfigError, match="cert"):
+        load_local_config(tmp_path)
+
+
+def test_load_local_config_rejects_htpasswd_non_string(tmp_path):
+    _write_pyproject(
+        tmp_path,
+        """
+        [tool.auntiepypi.local]
+        htpasswd = false
+        """,
+    )
+    with pytest.raises(ServerConfigError, match="htpasswd"):
+        load_local_config(tmp_path)
+
+
+# --------- truth table: loopback lift rule ---------
+
+
+def test_load_local_config_loopback_with_tls_only_ok(tmp_path, monkeypatch):
+    """Loopback host accepts any TLS/auth combination (including just TLS)."""
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
+    _write_pyproject(
+        tmp_path,
+        """
+        [tool.auntiepypi.local]
+        host = "127.0.0.1"
+        cert = "/tmp/c.pem"
+        key  = "/tmp/k.pem"
+        """,
+    )
+    cfg = load_local_config(tmp_path)
+    assert cfg.host == "127.0.0.1"
+    assert cfg.tls_enabled is True
+
+
+def test_load_local_config_non_loopback_with_full_bundle_ok(tmp_path, monkeypatch):
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
+    _write_pyproject(
+        tmp_path,
+        """
+        [tool.auntiepypi.local]
+        host = "0.0.0.0"
+        cert = "/tmp/c.pem"
+        key  = "/tmp/k.pem"
+        htpasswd = "/tmp/htp"
+        """,
+    )
+    cfg = load_local_config(tmp_path)
+    assert cfg.host == "0.0.0.0"
+    assert cfg.tls_enabled is True
+    assert cfg.auth_enabled is True
+
+
+def test_load_local_config_non_loopback_partial_tls_rejected(tmp_path):
+    """cert without key → ServerConfigError naming the missing piece."""
+    _write_pyproject(
+        tmp_path,
+        """
+        [tool.auntiepypi.local]
+        host = "0.0.0.0"
+        cert = "/tmp/c.pem"
+        htpasswd = "/tmp/htp"
+        """,
+    )
+    with pytest.raises(ServerConfigError, match=r"missing: key"):
+        load_local_config(tmp_path)
+
+
+def test_load_local_config_non_loopback_missing_key_only(tmp_path):
+    _write_pyproject(
+        tmp_path,
+        """
+        [tool.auntiepypi.local]
+        host = "0.0.0.0"
+        key = "/tmp/k.pem"
+        htpasswd = "/tmp/htp"
+        """,
+    )
+    with pytest.raises(ServerConfigError, match=r"missing: cert"):
+        load_local_config(tmp_path)
+
+
+def test_load_local_config_non_loopback_missing_htpasswd_rejected(tmp_path):
+    _write_pyproject(
+        tmp_path,
+        """
+        [tool.auntiepypi.local]
+        host = "0.0.0.0"
+        cert = "/tmp/c.pem"
+        key  = "/tmp/k.pem"
+        """,
+    )
+    with pytest.raises(ServerConfigError, match=r"missing: htpasswd"):
+        load_local_config(tmp_path)
+
+
+def test_load_local_config_non_loopback_missing_tls_rejected(tmp_path):
+    _write_pyproject(
+        tmp_path,
+        """
+        [tool.auntiepypi.local]
+        host = "0.0.0.0"
+        htpasswd = "/tmp/htp"
+        """,
+    )
+    with pytest.raises(ServerConfigError, match=r"missing: cert\+key"):
+        load_local_config(tmp_path)
+
+
+def test_load_local_config_ipv6_dual_stack_rejected_without_bundle(tmp_path):
+    """IPv6 :: (dual-stack) is non-loopback and requires the full bundle."""
+    _write_pyproject(
+        tmp_path,
+        """
+        [tool.auntiepypi.local]
+        host = "::"
+        """,
+    )
+    with pytest.raises(ServerConfigError, match="non-loopback binds require BOTH"):
+        load_local_config(tmp_path)
+
+
+def test_load_local_config_ipv6_dual_stack_with_bundle_ok(tmp_path, monkeypatch):
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
+    _write_pyproject(
+        tmp_path,
+        """
+        [tool.auntiepypi.local]
+        host = "::"
+        cert = "/tmp/c.pem"
+        key  = "/tmp/k.pem"
+        htpasswd = "/tmp/htp"
+        """,
+    )
+    cfg = load_local_config(tmp_path)
+    assert cfg.host == "::"
+
+
+def test_load_local_config_error_names_host_in_message(tmp_path):
+    """The error includes the offending host so operators know which value to fix."""
+    _write_pyproject(
+        tmp_path,
+        """
+        [tool.auntiepypi.local]
+        host = "10.0.0.5"
+        """,
+    )
+    with pytest.raises(ServerConfigError, match="'10.0.0.5'"):
+        load_local_config(tmp_path)
