@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import html
 import re
+import shutil
 from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 from urllib.parse import unquote, urlparse
@@ -119,12 +120,17 @@ def make_handler(root: Path) -> type[BaseHTTPRequestHandler]:
                 return self._send_status(404)
             if not candidate.is_file():
                 return self._send_status(404)
-            data = candidate.read_bytes()
+            # Stream the file rather than read_bytes() — wheels can be
+            # tens of megabytes and a thread-per-request server holds
+            # one buffer per concurrent download. shutil.copyfileobj
+            # uses an 8 KiB default chunk under the hood.
+            size = candidate.stat().st_size
             self.send_response(200)
             self.send_header("Content-Type", "application/octet-stream")
-            self.send_header("Content-Length", str(len(data)))
+            self.send_header("Content-Length", str(size))
             self.end_headers()
-            self.wfile.write(data)
+            with candidate.open("rb") as src:
+                shutil.copyfileobj(src, self.wfile)
 
         # --- helpers -------------------------------------------------------
 

@@ -12,6 +12,7 @@ module). The HTTP layer is :mod:`._app`; filesystem walk lives in
 from __future__ import annotations
 
 import signal
+import threading
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 from typing import Callable
@@ -37,9 +38,12 @@ def serve(
     httpd = server_factory((host, port), handler_cls)
 
     def _shutdown(_signum: int, _frame: object) -> None:
-        # ``httpd.shutdown()`` is safe to call from a signal handler:
-        # it only sets a flag the serve_forever() loop checks.
-        httpd.shutdown()
+        # ``httpd.shutdown()`` blocks until ``serve_forever()`` returns
+        # and must therefore run on a *different* thread (Python docs:
+        # http.server.BaseServer.shutdown). Calling it directly from
+        # the signal handler — same thread as ``serve_forever()`` —
+        # would deadlock.
+        threading.Thread(target=httpd.shutdown, daemon=True).start()
 
     # signal.signal() only works in the main thread; the strategy
     # module spawns this as a subprocess (its own main thread) so

@@ -82,6 +82,41 @@ def start(detection: Detection, declaration: ServerSpec) -> ActionResult:
     pid = proc.pid
     result = probe(detection)
     if result.status == "up":
+        # Port-conflict false-success guard: a 200 from the probe could
+        # come from a *different* process that already owned the port if
+        # our spawn lost the bind race (or failed to bind because the
+        # port was taken). Verify our spawned child is still alive
+        # before claiming success — and on Linux, that the actual port
+        # listener is our PID. Without these checks, we'd persist a
+        # PID file pointing at a dead/wrong process.
+        if proc.poll() is not None:
+            return ActionResult(
+                ok=False,
+                detail=(
+                    f"port {declaration.port} already serves a 200 response, "
+                    f"but our spawn exited (rc={proc.returncode}); see {log_path}"
+                ),
+                log_path=str(log_path),
+                pid=None,
+            )
+        if sys.platform == "linux":
+            owner_pid = _pid.find_by_port(
+                declaration.port,
+                expected_argv=list(declaration.command),
+            )
+            if owner_pid is not None and owner_pid != pid:
+                # Our spawn is alive but isn't the listener — a foreign
+                # process owns the port. Reap and fail.
+                _terminate_orphan(proc)
+                return ActionResult(
+                    ok=False,
+                    detail=(
+                        f"port {declaration.port} already bound by pid {owner_pid} "
+                        f"(our spawn pid={pid} terminated); see {log_path}"
+                    ),
+                    log_path=str(log_path),
+                    pid=None,
+                )
         # Persist PID + sidecar for future `auntie down` / `restart`.
         try:
             _pid.write(
@@ -117,6 +152,24 @@ def start(detection: Detection, declaration: ServerSpec) -> ActionResult:
         log_path=str(log_path),
         pid=None,
     )
+
+
+def _terminate_orphan(proc: subprocess.Popen) -> None:
+    """Reap a spawned process that lost the bind race. Best effort — the
+    caller already returned ok=False, so a stuck child here just leaks
+    a small amount of state into XDG.
+    """
+    try:
+        KILL(proc.pid, signal.SIGTERM)
+    except OSError:
+        return
+    try:
+        proc.wait(timeout=2.0)
+    except subprocess.TimeoutExpired:
+        try:
+            KILL(proc.pid, signal.SIGKILL)
+        except OSError:
+            pass
 
 
 def _spawn_error(err: OSError, declaration: ServerSpec, log_path: Path) -> ActionResult:

@@ -19,8 +19,10 @@ from __future__ import annotations
 import sys
 from dataclasses import replace
 
+from auntiepypi._actions import _pid
 from auntiepypi._actions import command as _command
 from auntiepypi._actions._action import ActionResult
+from auntiepypi._actions._reprobe import probe
 from auntiepypi._detect._config import ServerSpec, load_local_config
 from auntiepypi._detect._detection import Detection
 from auntiepypi._server._config import LocalConfig
@@ -61,10 +63,25 @@ def _materialize(declaration: ServerSpec) -> ServerSpec:
 
 def start(detection: Detection, declaration: ServerSpec) -> ActionResult:
     materialized = _materialize(declaration)
+    cfg = load_local_config()
+
+    # Idempotency: if the configured port is already serving 200 AND we
+    # have a live PID file pointing at it, return success without
+    # spawning a duplicate. Without this, repeated `auntie up` calls
+    # either fail with a bind error or quietly orphan the previous
+    # process by overwriting the PID file.
+    if probe(detection, budget_seconds=0.5).status == "up":
+        record = _pid.read(declaration.name, materialized.port)
+        if record is not None:
+            return ActionResult(
+                ok=True,
+                detail="already started",
+                pid=record.pid,
+            )
+
     # Ensure the wheelhouse exists; the server itself tolerates missing
     # roots (returns empty index), but the operator probably wants the
     # directory created on first ``auntie up``.
-    cfg = load_local_config()
     try:
         cfg.root.mkdir(parents=True, exist_ok=True)
     except OSError as err:

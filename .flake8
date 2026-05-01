@@ -12,10 +12,10 @@ extend-ignore = E203, W503, S404, S603
 # Per-file ignores. Keep narrow; do not broaden to silence real findings.
 # tests/*:
 #   S101 — pytest tests are asserts by convention; flake8-bandit warns on assert.
-#   S104 — tests assert that "0.0.0.0" is REJECTED by the loopback validator;
-#          the literal is the test fixture, not a real bind.
-#   S108 — tests use literal /tmp paths as argparse fixtures; never created.
 #   S404 — `import subprocess` is a tool of the trade for invoking the CLI under test.
 #   S603 — `subprocess.run([sys.executable, "-m", ...])` is fully trusted input.
+# Narrower ignores (e.g. S104, S108, S5443) belong on the line that triggered
+# them via `# noqa: SXXX` — see tests/test_config_local.py and
+# tests/test_server_main.py for examples.
 per-file-ignores =
-    tests/*:S101,S104,S108,S404,S603
+    tests/*:S101,S404,S603

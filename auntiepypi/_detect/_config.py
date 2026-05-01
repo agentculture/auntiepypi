@@ -150,6 +150,12 @@ def _validate_required_strings(entry: dict, idx: int) -> tuple[str, str]:
         raise ServerConfigError(
             f"[[tool.auntiepypi.servers]][{idx}]: missing 'name' (must be a non-empty string)"
         )
+    if name == "auntie":
+        raise ServerConfigError(
+            f"[[tool.auntiepypi.servers]][{idx}]: name 'auntie' is reserved for the "
+            "first-party server (managed by [tool.auntiepypi.local]); "
+            "rename this declaration."
+        )
     flavor = entry.get("flavor")
     if not isinstance(flavor, str):
         raise ServerConfigError(f"[[tool.auntiepypi.servers]][{idx}] {name!r}: missing 'flavor'")

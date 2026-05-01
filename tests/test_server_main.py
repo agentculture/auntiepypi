@@ -15,17 +15,20 @@ from auntiepypi._server import __main__ as server_main
 
 
 def test_parser_defaults():
-    args = server_main._parser().parse_args(["--root", "/tmp/wh"])
+    # /tmp path is an argparse fixture, never created on disk.
+    args = server_main._parser().parse_args(["--root", "/tmp/wh"])  # noqa: S108
     assert args.host == "127.0.0.1"
     assert args.port == 3141
-    assert args.root == Path("/tmp/wh")
+    assert args.root == Path("/tmp/wh")  # noqa: S108  # NOSONAR python:S5443
 
 
 def test_parser_overrides():
+    # "0.0.0.0" is a fixture asserting argparse passes the value through;
+    # the bind would be rejected at config-load time by load_local_config.
     args = server_main._parser().parse_args(
-        ["--host", "0.0.0.0", "--port", "8080", "--root", "/var/wheels"]
+        ["--host", "0.0.0.0", "--port", "8080", "--root", "/var/wheels"]  # noqa: S104
     )
-    assert args.host == "0.0.0.0"
+    assert args.host == "0.0.0.0"  # noqa: S104
     assert args.port == 8080
     assert args.root == Path("/var/wheels")
 

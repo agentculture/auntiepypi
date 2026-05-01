@@ -23,6 +23,7 @@ from auntiepypi._actions._action import ActionResult
 from auntiepypi._detect import detect_all
 from auntiepypi._detect._config import ServerSpec, load_local_config, load_servers_lenient
 from auntiepypi._detect._detection import Detection
+from auntiepypi._detect._http import format_http_url
 from auntiepypi.cli._commands._decide import Decisions, parse_decisions
 from auntiepypi.cli._errors import EXIT_ENV_ERROR, EXIT_SUCCESS, EXIT_USER_ERROR, AfiError
 from auntiepypi.cli._output import emit_result
@@ -50,7 +51,7 @@ def _local_pair() -> _Pair:
     cfg = load_local_config()
     # HTTP is by design here; HTTPS is deferred to v0.7.0. See
     # docs/superpowers/specs/2026-05-01-auntiepypi-v0.6.0-local-server-design.md.
-    url = f"http://{cfg.host}:{cfg.port}/"  # NOSONAR python:S5332
+    url = format_http_url(cfg.host, cfg.port)
     detection = Detection(
         name=RESERVED_NAME,
         flavor="auntiepypi",
@@ -84,7 +85,7 @@ def _detection_for_spec(detections: list[Detection], spec: ServerSpec) -> Detect
     # HTTP is by design here (matches _detect/_proc.py:169 and the rest
     # of the detection layer). HTTPS is deferred to v0.7.0; see
     # docs/superpowers/specs/2026-04-30-auntiepypi-v0.5.0-...md.
-    url = f"http://{host}:{spec.port}/"  # NOSONAR python:S5332
+    url = format_http_url(host, spec.port)
     return Detection(
         name=spec.name,
         flavor=spec.flavor or "unknown",
