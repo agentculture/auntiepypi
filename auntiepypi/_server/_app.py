@@ -46,6 +46,8 @@ def make_handler(root: Path) -> type[BaseHTTPRequestHandler]:
             parsed = urlparse(self.path)
             path = unquote(parsed.path)
 
+            if path == "/":
+                return self._serve_root()
             if path == "/simple/":
                 return self._serve_index()
             if path.startswith("/simple/"):
@@ -63,6 +65,17 @@ def make_handler(root: Path) -> type[BaseHTTPRequestHandler]:
             return self._send_status(404)
 
         # --- routes --------------------------------------------------------
+
+        def _serve_root(self) -> None:
+            body = (
+                "<!DOCTYPE html>\n"
+                "<html><head><title>auntiepypi</title></head>\n"
+                "<body><h1>auntiepypi</h1>\n"
+                "<p>First-party PEP 503 simple-index server. "
+                'See <a href="/simple/">/simple/</a> for the index.</p>\n'
+                "</body></html>\n"
+            )
+            self._send_html(body)
 
         def _serve_index(self) -> None:
             projects = sorted(list_projects(resolved_root).keys())

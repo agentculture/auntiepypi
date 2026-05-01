@@ -11,7 +11,6 @@ import pytest
 from auntiepypi import _server
 from auntiepypi._server import __main__ as server_main
 
-
 # --------- argparse ---------
 
 

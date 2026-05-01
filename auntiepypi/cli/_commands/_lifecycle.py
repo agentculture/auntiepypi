@@ -101,13 +101,11 @@ def _resolve_one_spec(target: str, specs: list[ServerSpec], decisions: Decisions
     if target == RESERVED_NAME:
         raise AfiError(
             code=EXIT_USER_ERROR,
-            message=(
-                f"name {RESERVED_NAME!r} is reserved for the first-party server"
-            ),
+            message=(f"name {RESERVED_NAME!r} is reserved for the first-party server"),
             remediation=(
-                f"use bare `auntie up`/`down`/`restart` (no target) to act on the "
-                f"first-party server, or rename the conflicting "
-                f"[[tool.auntiepypi.servers]] entry"
+                "use bare `auntie up`/`down`/`restart` (no target) to act on the "
+                "first-party server, or rename the conflicting "
+                "[[tool.auntiepypi.servers]] entry"
             ),
         )
     matching = [s for s in specs if s.name == target]

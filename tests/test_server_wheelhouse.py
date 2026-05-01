@@ -4,10 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from auntiepypi._server import _wheelhouse
-
 
 # --------- PEP 503 name normalization ---------
 
@@ -48,9 +45,10 @@ def test_parse_wheel_simple():
 
 def test_parse_wheel_with_build_tag():
     """PEP 427: optional build tag is digit-prefixed (3rd segment)."""
-    assert _wheelhouse.parse_filename(
-        "tensorflow-2.0.0-1-cp37-cp37m-manylinux2010_x86_64.whl"
-    ) == ("tensorflow", "2.0.0")
+    assert _wheelhouse.parse_filename("tensorflow-2.0.0-1-cp37-cp37m-manylinux2010_x86_64.whl") == (
+        "tensorflow",
+        "2.0.0",
+    )
 
 
 def test_parse_wheel_underscore_in_name():

@@ -9,8 +9,6 @@ from __future__ import annotations
 
 import json
 
-import pytest
-
 from auntiepypi._detect import _runtime
 from auntiepypi._detect._detection import Detection
 from auntiepypi.cli import main

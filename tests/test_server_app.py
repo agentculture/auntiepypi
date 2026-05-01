@@ -185,9 +185,20 @@ def test_files_rejects_subdirectory(served):
 
 def test_unknown_path_404(served):
     port, _ = served
-    for path in ("/", "/index.html", "/api/v1/whatever", "/simple"):
+    for path in ("/index.html", "/api/v1/whatever", "/simple"):
         status, _body, _ = _get(port, path)
         assert status == 404, path
+
+
+def test_root_landing_page(served):
+    """`/` returns a small 200 landing page so reprobe and curious users
+    see something other than a 404 at the root."""
+    port, _ = served
+    status, body, _ = _get(port, "/")
+    assert status == 200
+    text = body.decode()
+    assert "auntiepypi" in text
+    assert 'href="/simple/"' in text
 
 
 def test_post_method_405(served):

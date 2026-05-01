@@ -265,9 +265,7 @@ def _is_loopback(host: str) -> bool:
 
 def _validate_local_host(host: object) -> str:
     if not isinstance(host, str) or not host:
-        raise ServerConfigError(
-            "[tool.auntiepypi.local] 'host' must be a non-empty string"
-        )
+        raise ServerConfigError("[tool.auntiepypi.local] 'host' must be a non-empty string")
     if not _is_loopback(host):
         raise ServerConfigError(
             f"[tool.auntiepypi.local] 'host'={host!r}: v0.6.0 binds loopback "
@@ -279,17 +277,14 @@ def _validate_local_host(host: object) -> str:
 def _validate_local_port(port: object) -> int:
     if not isinstance(port, int) or isinstance(port, bool) or not 1 <= port <= 65535:
         raise ServerConfigError(
-            f"[tool.auntiepypi.local] 'port' out of range "
-            f"(got {port!r}; expected int 1..65535)"
+            f"[tool.auntiepypi.local] 'port' out of range " f"(got {port!r}; expected int 1..65535)"
         )
     return port
 
 
 def _validate_local_root(root: object) -> Path:
     if not isinstance(root, str) or not root:
-        raise ServerConfigError(
-            "[tool.auntiepypi.local] 'root' must be a non-empty string"
-        )
+        raise ServerConfigError("[tool.auntiepypi.local] 'root' must be a non-empty string")
     return Path(root).expanduser()
 
 

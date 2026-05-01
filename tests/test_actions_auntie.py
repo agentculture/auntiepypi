@@ -10,7 +10,6 @@ We test (1) the argv shape, (2) that start/stop/restart delegate to
 from __future__ import annotations
 
 import sys
-from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -136,9 +135,7 @@ def test_start_creates_wheelhouse(monkeypatch, tmp_path, base_detection, base_sp
     """First ``auntie up`` should mkdir -p the wheelhouse."""
     wheel_root = tmp_path / "fresh-wheels"
     assert not wheel_root.exists()
-    (tmp_path / "pyproject.toml").write_text(
-        f'[tool.auntiepypi.local]\nroot = "{wheel_root}"\n'
-    )
+    (tmp_path / "pyproject.toml").write_text(f'[tool.auntiepypi.local]\nroot = "{wheel_root}"\n')
     monkeypatch.chdir(tmp_path)
 
     monkeypatch.setattr(_command, "start", lambda d, s: ActionResult(ok=True, detail="started"))
@@ -151,9 +148,7 @@ def test_start_propagates_mkdir_error(monkeypatch, tmp_path, base_detection, bas
     without invoking command.start.
     """
     wheel_root = tmp_path / "wheels"
-    (tmp_path / "pyproject.toml").write_text(
-        f'[tool.auntiepypi.local]\nroot = "{wheel_root}"\n'
-    )
+    (tmp_path / "pyproject.toml").write_text(f'[tool.auntiepypi.local]\nroot = "{wheel_root}"\n')
     monkeypatch.chdir(tmp_path)
 
     def boom(*args, **kwargs):

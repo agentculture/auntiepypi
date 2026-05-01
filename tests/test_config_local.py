@@ -14,7 +14,6 @@ from auntiepypi._detect._config import (
 )
 from auntiepypi._server._config import LocalConfig, default_root
 
-
 # --------- default_root() ---------
 
 
