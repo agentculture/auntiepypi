@@ -236,8 +236,9 @@ target:
 
 - The **first-party server** — auntie's own PEP 503 simple-index,
   configured by `[tool.auntiepypi.local]`. Default port 3141; default
-  wheelhouse `$XDG_DATA_HOME/auntiepypi/wheels/`. Loopback-only in
-  v0.6.0; auth + TLS land in v0.7.0.
+  wheelhouse `$XDG_DATA_HOME/auntiepypi/wheels/`. Loopback-only by
+  default; non-loopback bind requires both TLS (`cert` + `key`) and
+  HTTP Basic auth (`htpasswd`, bcrypt-only) configured together.
 - A **named declaration** in `[[tool.auntiepypi.servers]]` whose
   `managed_by` is `systemd-user` or `command`.
 - All supervised targets at once via `--all`.

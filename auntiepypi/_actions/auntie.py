@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import sys
 from dataclasses import replace
+from pathlib import Path
 from typing import cast
 
 from auntiepypi._actions import _pid
@@ -30,7 +31,7 @@ from auntiepypi._server._config import LocalConfig
 
 
 def _argv(cfg: LocalConfig) -> tuple[str, ...]:
-    return (
+    args: list[str] = [
         sys.executable,
         "-m",
         "auntiepypi._server",
@@ -40,7 +41,53 @@ def _argv(cfg: LocalConfig) -> tuple[str, ...]:
         str(cfg.port),
         "--root",
         str(cfg.root),
-    )
+    ]
+    if cfg.tls_enabled:
+        # tls_enabled is True only when both cert and key are set, so
+        # the asserts below are documentation, not runtime checks.
+        args += ["--cert", str(cfg.cert), "--key", str(cfg.key)]
+    if cfg.auth_enabled:
+        args += ["--htpasswd", str(cfg.htpasswd)]
+    return tuple(args)
+
+
+def _check_readable(path: Path, label: str) -> str | None:
+    """Return None when readable; else a short error detail."""
+    if not path.exists():
+        return f"{label} path not found: {path}"
+    try:
+        # Open + immediately close — verifies the spawned subprocess
+        # would succeed at the same operation, without holding state.
+        # ``os.access`` would be cheaper but is TOCTOU-prone and lies
+        # about ACL-based denials on some platforms.
+        path.open("rb").close()
+    except OSError as err:
+        return f"{label} not readable ({path}): {err}"
+    return None
+
+
+def _verify_tls_auth_paths(cfg: LocalConfig) -> ActionResult | None:
+    """Pre-flight readability check on configured cert/key/htpasswd.
+
+    Returns None when all configured paths are readable; otherwise
+    an ActionResult(ok=False) with a clear detail. Surfacing the miss
+    as a strategy-level failure (instead of a raise) preserves
+    `--all`'s independent-dispatch semantics — a broken local server
+    config doesn't strand the operator's declared mirrors.
+    """
+    if cfg.tls_enabled:
+        # tls_enabled is True only when both cert and key are set.
+        assert cfg.cert is not None and cfg.key is not None  # noqa: S101
+        for path, label in ((cfg.cert, "cert"), (cfg.key, "key")):
+            err = _check_readable(path, label)
+            if err is not None:
+                return ActionResult(ok=False, detail=err)
+    if cfg.auth_enabled:
+        assert cfg.htpasswd is not None  # noqa: S101 - invariant tripwire
+        err = _check_readable(cfg.htpasswd, "htpasswd")
+        if err is not None:
+            return ActionResult(ok=False, detail=err)
+    return None
 
 
 def _materialize(declaration: ServerSpec) -> ServerSpec:
@@ -84,6 +131,15 @@ def start(detection: Detection, declaration: ServerSpec) -> ActionResult:
                 detail="already started",
                 pid=record.pid,
             )
+
+    # Pre-flight TLS / auth path checks. A missing cert or htpasswd at
+    # spawn time would surface as a noisy traceback in the spawned
+    # subprocess (visible only in the log file); catching it here turns
+    # it into a clear ActionResult(ok=False) and, importantly, doesn't
+    # strand declared servers under `auntie up --all`.
+    tls_auth_err = _verify_tls_auth_paths(cfg)
+    if tls_auth_err is not None:
+        return tls_auth_err
 
     # Ensure the wheelhouse exists; the server itself tolerates missing
     # roots (returns empty index), but the operator probably wants the

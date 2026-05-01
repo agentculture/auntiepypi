@@ -6,17 +6,23 @@
 > running locally, and starts/stops/restarts declared servers —
 > informational first, actionable on demand.
 
-**Status:** v0.6.0 — first-party PEP 503 server landed. Bare
-`auntie up` / `auntie down` / `auntie restart` now start, stop, and
-restart auntie's own simple-index server (read-only slice; configured
-by `[tool.auntiepypi.local]`; loopback-only). Wheels in
-`$XDG_DATA_HOME/auntiepypi/wheels/` are served from
-`http://127.0.0.1:3141/simple/` and installable via
-`pip install --index-url`. Lifecycle verbs continue to work against
-declared servers (`managed_by ∈ {systemd-user, command}`); `--all`
-now aggregates the first-party server with every supervised
-declaration. `auntie publish`, HTTPS, and basic-auth are deferred to
-v0.7.0.
+**Status:** v0.7.0 — HTTPS + basic-auth landed. The first-party server
+now supports optional TLS termination (operator-supplied PEM via
+`[tool.auntiepypi.local].cert` / `.key`, TLS 1.2 floor) and HTTP Basic
+auth (Apache htpasswd file, bcrypt-only, via
+`[tool.auntiepypi.local].htpasswd`). Public binding (non-loopback) is
+allowed when both are configured; either alone is rejected at
+config-load time. `bcrypt>=4.0,<5` is the first runtime dependency.
+
+Bare `auntie up` / `auntie down` / `auntie restart` (introduced in
+v0.6.0) continue to start, stop, and restart auntie's own simple-index
+server. Wheels in `$XDG_DATA_HOME/auntiepypi/wheels/` are served from
+`http://127.0.0.1:3141/simple/` (or `https://...` when TLS is
+configured) and installable via `pip install --index-url`. Lifecycle
+verbs continue to work against declared servers (`managed_by ∈
+{systemd-user, command}`); `--all` aggregates the first-party server
+with every supervised declaration. `auntie publish` (write side) is
+deferred to v0.8.0.
 
 ## Quick start
 
@@ -64,7 +70,23 @@ flavor = "pypiserver"
 port = 8080
 managed_by = "systemd-user"
 unit = "pypi-server.service"
+
+# v0.7.0: HTTPS + Basic auth on the first-party server.
+# Loopback host (127.0.0.1, ::1, localhost) is always allowed.
+# Non-loopback host requires BOTH cert+key AND htpasswd.
+[tool.auntiepypi.local]
+host = "0.0.0.0"
+cert = "/etc/ssl/private/auntie.pem"
+key  = "/etc/ssl/private/auntie.key"
+htpasswd = "/etc/auntie/htpasswd"      # bcrypt-only; populate via `htpasswd -B`
 ```
+
+> **pip + Basic auth note.** `pip install --index-url
+> https://user:pass@host:port/simple/` works but embeds creds in URL,
+> leaking them in process listings and pip's debug output. `keyring`
+> integration is the long-term answer; in the meantime, an environment-
+> scoped per-user `pip.conf` (path resolves via `python -m pip config
+> debug`) reduces exposure.
 
 ### `auntie doctor` walkthrough
 

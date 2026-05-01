@@ -1,6 +1,6 @@
 [project]
 name = "auntiepypi"
-version = "0.6.0"
+version = "0.7.0"
 description = "auntiepypi — both ends of the Python distribution pipe for the AgentCulture mesh."
 readme = "README.md"
 license = "MIT"
@@ -14,9 +14,12 @@ classifiers = [
     "Intended Audience :: Developers",
 ]
 dependencies = [
-    # Zero runtime deps. Stdlib only (argparse, json, tomllib,
-    # urllib.request, socket, subprocess, concurrent.futures). Add only when a verb needs
-    # something stdlib can't do.
+    # Stdlib only except for cryptographic primitives stdlib doesn't ship:
+    # bcrypt is the de-facto htpasswd password verifier (crypt was removed
+    # in 3.13; hashlib.scrypt isn't htpasswd-compatible). Pinned to <5 to
+    # avoid surprise majors. Other deps still come in only when a verb
+    # genuinely needs something stdlib can't do.
+    "bcrypt>=4.0,<5",
 ]
 
 [project.urls]
@@ -47,6 +50,9 @@ dev = [
     "black>=23.7.0",
     "pylint>=3.0",
     "pre-commit>=3.6",
+    # Test-only: generates a session-scoped self-signed RSA cert/key
+    # pair for tls/auth tests. Production code never imports this.
+    "cryptography>=42.0",
 ]
 
 [tool.coverage.run]

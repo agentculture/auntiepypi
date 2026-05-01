@@ -39,15 +39,121 @@ def test_parser_requires_root():
         server_main._parser().parse_args([])
 
 
+def test_parser_tls_auth_flags_default_to_none():
+    fixture_root = "/tmp/wh"  # noqa: S108  # NOSONAR python:S5443
+    args = server_main._parser().parse_args(["--root", fixture_root])
+    assert args.cert is None
+    assert args.key is None
+    assert args.htpasswd is None
+
+
+def test_parser_tls_auth_flags_pass_through(tmp_path: Path):
+    cert = tmp_path / "c.pem"
+    key = tmp_path / "k.pem"
+    htp = tmp_path / "htp"
+    args = server_main._parser().parse_args(
+        [
+            "--root",
+            str(tmp_path),
+            "--cert",
+            str(cert),
+            "--key",
+            str(key),
+            "--htpasswd",
+            str(htp),
+        ]
+    )
+    assert args.cert == cert
+    assert args.key == key
+    assert args.htpasswd == htp
+
+
 def test_main_calls_serve(monkeypatch, tmp_path):
     captured: dict[str, object] = {}
 
-    def fake_serve(host: str, port: int, root: Path) -> None:
-        captured.update({"host": host, "port": port, "root": root})
+    def fake_serve(
+        host: str,
+        port: int,
+        root: Path,
+        *,
+        ssl_context=None,
+        htpasswd_map=None,
+    ) -> None:
+        captured.update(
+            {
+                "host": host,
+                "port": port,
+                "root": root,
+                "ssl_context": ssl_context,
+                "htpasswd_map": htpasswd_map,
+            }
+        )
 
     monkeypatch.setattr(server_main, "serve", fake_serve)
     server_main.main(["--host", "127.0.0.1", "--port", "9999", "--root", str(tmp_path)])
-    assert captured == {"host": "127.0.0.1", "port": 9999, "root": tmp_path}
+    assert captured["host"] == "127.0.0.1"
+    assert captured["port"] == 9999
+    assert captured["root"] == tmp_path
+    assert captured["ssl_context"] is None
+    assert captured["htpasswd_map"] is None
+
+
+def test_main_rejects_cert_without_key(tmp_path: Path):
+    with pytest.raises(SystemExit) as exc:
+        server_main.main(["--root", str(tmp_path), "--cert", str(tmp_path / "c.pem")])
+    assert exc.value.code == 2
+
+
+def test_main_rejects_key_without_cert(tmp_path: Path):
+    with pytest.raises(SystemExit) as exc:
+        server_main.main(["--root", str(tmp_path), "--key", str(tmp_path / "k.pem")])
+    assert exc.value.code == 2
+
+
+def test_main_builds_ssl_context_when_pair_set(monkeypatch, tmp_path, tls_cert_pair):
+    cert, key = tls_cert_pair
+    captured: dict[str, object] = {}
+
+    def fake_serve(host, port, root, *, ssl_context=None, htpasswd_map=None):  # noqa: ANN001
+        captured["ssl_context"] = ssl_context
+
+    monkeypatch.setattr(server_main, "serve", fake_serve)
+    server_main.main(
+        [
+            "--root",
+            str(tmp_path),
+            "--cert",
+            str(cert),
+            "--key",
+            str(key),
+        ]
+    )
+    import ssl as _ssl
+
+    assert isinstance(captured["ssl_context"], _ssl.SSLContext)
+
+
+def test_main_parses_htpasswd_when_set(monkeypatch, tmp_path):
+    import bcrypt
+
+    htp = tmp_path / "htp"
+    # Test fixture only — never written to disk outside tmp_path. Cost-4
+    # keeps the suite fast (production cost ≥ 12 via `htpasswd -B`).
+    h = bcrypt.hashpw(  # NOSONAR python:S5344
+        b"fixture-pw",  # NOSONAR python:S2068 - test fixture, not a credential
+        bcrypt.gensalt(rounds=4),  # NOSONAR python:S5344
+    )
+    htp.write_bytes(b"alice:" + h + b"\n")
+
+    captured: dict[str, object] = {}
+
+    def fake_serve(host, port, root, *, ssl_context=None, htpasswd_map=None):  # noqa: ANN001
+        captured["htpasswd_map"] = htpasswd_map
+
+    monkeypatch.setattr(server_main, "serve", fake_serve)
+    server_main.main(["--root", str(tmp_path), "--htpasswd", str(htp)])
+    assert isinstance(captured["htpasswd_map"], dict)
+    assert "alice" in captured["htpasswd_map"]
 
 
 # --------- serve() integration ---------

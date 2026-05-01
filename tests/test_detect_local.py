@@ -26,7 +26,7 @@ def _outcome(
 def test_local_detect_absent(monkeypatch, tmp_path):
     monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
     monkeypatch.setattr(
-        _local, "probe_endpoint", lambda h, p, timeout: _outcome(tcp_open=False, http_status=None)
+        _local, "probe_endpoint", lambda h, p, **kw: _outcome(tcp_open=False, http_status=None)
     )
     det = _local.detect()
     assert det.name == "auntie"
@@ -43,7 +43,7 @@ def test_local_detect_up(monkeypatch, tmp_path):
     monkeypatch.setattr(
         _local,
         "probe_endpoint",
-        lambda h, p, timeout: _outcome(tcp_open=True, http_status=200, body=b"<html>"),
+        lambda h, p, **kw: _outcome(tcp_open=True, http_status=200, body=b"<html>"),
     )
     det = _local.detect()
     assert det.status == "up"
@@ -55,7 +55,7 @@ def test_local_detect_down_http_error(monkeypatch, tmp_path):
     monkeypatch.setattr(
         _local,
         "probe_endpoint",
-        lambda h, p, timeout: _outcome(tcp_open=True, http_status=None, error="timeout"),
+        lambda h, p, **kw: _outcome(tcp_open=True, http_status=None, error="timeout"),
     )
     det = _local.detect()
     assert det.status == "down"
@@ -67,7 +67,7 @@ def test_local_detect_down_5xx(monkeypatch, tmp_path):
     monkeypatch.setattr(
         _local,
         "probe_endpoint",
-        lambda h, p, timeout: _outcome(tcp_open=True, http_status=503),
+        lambda h, p, **kw: _outcome(tcp_open=True, http_status=503),
     )
     det = _local.detect()
     assert det.status == "down"
@@ -82,7 +82,7 @@ def test_local_detect_uses_configured_host_port(tmp_path, monkeypatch):
 
     captured = {}
 
-    def fake_probe(host, port, timeout):
+    def fake_probe(host, port, **kw):
         captured["host"] = host
         captured["port"] = port
         return _outcome(tcp_open=False, http_status=None)
@@ -92,6 +92,80 @@ def test_local_detect_uses_configured_host_port(tmp_path, monkeypatch):
     assert captured == {"host": "::1", "port": 9999}
     assert det.host == "::1"
     assert det.port == 9999
+
+
+# --------- v0.7.0: HTTPS scheme + 401-as-up ---------
+
+
+def test_local_detect_uses_https_when_tls_configured(tmp_path, monkeypatch):
+    cert = tmp_path / "c.pem"
+    key = tmp_path / "k.pem"
+    (tmp_path / "pyproject.toml").write_text(
+        f'[tool.auntiepypi.local]\ncert = "{cert}"\nkey = "{key}"\n'
+    )
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
+
+    captured = {}
+
+    def fake_probe(host, port, **kw):
+        captured["scheme"] = kw.get("scheme")
+        captured["ssl_context"] = kw.get("ssl_context")
+        return _outcome(tcp_open=True, http_status=200)
+
+    monkeypatch.setattr(_local, "probe_endpoint", fake_probe)
+    _local.detect()
+    assert captured["scheme"] == "https"
+    assert captured["ssl_context"] is not None
+
+
+def test_local_detect_uses_http_when_tls_not_configured(tmp_path, monkeypatch):
+    """v0.6.0-style configs (no cert/key) still probe over plain HTTP."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
+
+    captured = {}
+
+    def fake_probe(host, port, **kw):
+        captured["scheme"] = kw.get("scheme")
+        captured["ssl_context"] = kw.get("ssl_context")
+        return _outcome(tcp_open=False, http_status=None)
+
+    monkeypatch.setattr(_local, "probe_endpoint", fake_probe)
+    _local.detect()
+    assert captured["scheme"] == "http"
+    assert captured["ssl_context"] is None
+
+
+def test_local_detect_401_counts_as_up_when_auth_enabled(tmp_path, monkeypatch):
+    htp = tmp_path / "htp"
+    (tmp_path / "pyproject.toml").write_text(f'[tool.auntiepypi.local]\nhtpasswd = "{htp}"\n')
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
+
+    monkeypatch.setattr(
+        _local,
+        "probe_endpoint",
+        lambda h, p, **kw: _outcome(tcp_open=True, http_status=401),
+    )
+    det = _local.detect()
+    # 401 from a server with auth on means the gate is working.
+    assert det.status == "up"
+
+
+def test_local_detect_401_is_down_when_auth_not_enabled(tmp_path, monkeypatch):
+    """A 401 from a server we *don't* expect to require auth is anomalous."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
+
+    monkeypatch.setattr(
+        _local,
+        "probe_endpoint",
+        lambda h, p, **kw: _outcome(tcp_open=True, http_status=401),
+    )
+    det = _local.detect()
+    assert det.status == "down"
+    assert "401" in det.detail
 
 
 # --------- detect_all chain ---------

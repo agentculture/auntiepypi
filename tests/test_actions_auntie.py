@@ -64,6 +64,66 @@ def test_argv_shape(tmp_path):
     assert str(tmp_path / "wheels") in argv
 
 
+def test_argv_omits_tls_auth_flags_when_unconfigured(tmp_path):
+    """v0.6.0-style configs (no cert/key/htpasswd) yield argv with no
+    TLS or auth flags."""
+    cfg = LocalConfig(host="127.0.0.1", port=3141, root=tmp_path / "wheels")
+    argv = _auntie._argv(cfg)
+    assert "--cert" not in argv
+    assert "--key" not in argv
+    assert "--htpasswd" not in argv
+
+
+def test_argv_appends_tls_flags_when_configured(tmp_path):
+    cert = tmp_path / "c.pem"
+    key = tmp_path / "k.pem"
+    cfg = LocalConfig(
+        host="127.0.0.1",
+        port=3141,
+        root=tmp_path / "wheels",
+        cert=cert,
+        key=key,
+    )
+    argv = _auntie._argv(cfg)
+    assert "--cert" in argv
+    assert str(cert) in argv
+    assert "--key" in argv
+    assert str(key) in argv
+    assert "--htpasswd" not in argv  # auth not configured
+
+
+def test_argv_appends_htpasswd_flag_when_configured(tmp_path):
+    htp = tmp_path / "htp"
+    cfg = LocalConfig(
+        host="127.0.0.1",
+        port=3141,
+        root=tmp_path / "wheels",
+        htpasswd=htp,
+    )
+    argv = _auntie._argv(cfg)
+    assert "--htpasswd" in argv
+    assert str(htp) in argv
+    assert "--cert" not in argv  # tls not configured
+
+
+def test_argv_full_bundle(tmp_path):
+    cert = tmp_path / "c.pem"
+    key = tmp_path / "k.pem"
+    htp = tmp_path / "htp"
+    cfg = LocalConfig(
+        host="127.0.0.1",
+        port=3141,
+        root=tmp_path / "wheels",
+        cert=cert,
+        key=key,
+        htpasswd=htp,
+    )
+    argv = _auntie._argv(cfg)
+    assert "--cert" in argv
+    assert "--key" in argv
+    assert "--htpasswd" in argv
+
+
 # --------- ACTIONS registration ---------
 
 
@@ -197,3 +257,82 @@ def test_restart_delegates(monkeypatch, tmp_path, base_detection, base_spec):
     result = _auntie.restart(base_detection, base_spec)
     assert result.ok
     assert captured["spec"].managed_by == "command"
+
+
+# --------- v0.7.0 readability guards ---------
+
+
+def test_start_returns_ok_false_when_cert_missing(monkeypatch, tmp_path, base_detection, base_spec):
+    """A configured cert path that doesn't exist must surface as a
+    failed ActionResult (not a raise) so `auntie up --all` can still
+    process declared servers."""
+    cert = tmp_path / "missing-cert.pem"
+    key = tmp_path / "k.pem"
+    key.write_text("dummy")
+    htp = tmp_path / "htp"
+    htp.write_text("dummy")
+    (tmp_path / "pyproject.toml").write_text(f"""
+        [tool.auntiepypi.local]
+        cert = "{cert}"
+        key  = "{key}"
+        htpasswd = "{htp}"
+        """)
+    monkeypatch.chdir(tmp_path)
+
+    called = {"start": False}
+
+    def fake_start(d, s):
+        called["start"] = True
+        return ActionResult(ok=True, detail="started")
+
+    monkeypatch.setattr(_command, "start", fake_start)
+    result = _auntie.start(base_detection, base_spec)
+    assert not result.ok
+    assert "cert" in result.detail and "not found" in result.detail
+    assert not called["start"]
+
+
+def test_start_returns_ok_false_when_htpasswd_missing(
+    monkeypatch, tmp_path, base_detection, base_spec
+):
+    htp = tmp_path / "no-such-htpasswd"
+    (tmp_path / "pyproject.toml").write_text(f"""
+        [tool.auntiepypi.local]
+        htpasswd = "{htp}"
+        """)
+    monkeypatch.chdir(tmp_path)
+
+    monkeypatch.setattr(_command, "start", lambda d, s: ActionResult(ok=True))
+    result = _auntie.start(base_detection, base_spec)
+    assert not result.ok
+    assert "htpasswd" in result.detail and "not found" in result.detail
+
+
+def test_start_passes_when_all_configured_paths_readable(
+    monkeypatch, tmp_path, base_detection, base_spec
+):
+    """All paths exist + readable → readability guard passes,
+    delegates to command.start."""
+    cert = tmp_path / "c.pem"
+    key = tmp_path / "k.pem"
+    htp = tmp_path / "htp"
+    for p in (cert, key, htp):
+        p.write_text("dummy")
+    (tmp_path / "pyproject.toml").write_text(f"""
+        [tool.auntiepypi.local]
+        cert = "{cert}"
+        key  = "{key}"
+        htpasswd = "{htp}"
+        """)
+    monkeypatch.chdir(tmp_path)
+
+    delegated = {"yes": False}
+
+    def fake_start(d, s):
+        delegated["yes"] = True
+        return ActionResult(ok=True, detail="started")
+
+    monkeypatch.setattr(_command, "start", fake_start)
+    result = _auntie.start(base_detection, base_spec)
+    assert result.ok
+    assert delegated["yes"]

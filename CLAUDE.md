@@ -2,26 +2,33 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Status: v0.6.0 — first-party PEP 503 server landed
+## Status: v0.7.0 — HTTPS + basic-auth landed
 
-Bare `auntie up` / `auntie down` / `auntie restart` now start, stop,
-and restart auntie's own PEP 503 simple-index server (read-only slice
-— `GET /simple/`, `GET /simple/<pkg>/`, `GET /files/<filename>`). The
-server is stdlib-only (`http.server` + `ThreadingHTTPServer`),
-configured by `[tool.auntiepypi.local]` (host loopback-only in v0.6.0,
-default port 3141, default wheelhouse
-`$XDG_DATA_HOME/auntiepypi/wheels/`), and plugs into the existing
-lifecycle machinery as a third managed_by strategy `"auntie"` that
-wraps `command.py` with a derived argv. The name `"auntie"` is
-reserved as a server name. `auntie overview` always surfaces a local
-section (status reflects the probe).
+The first-party server gains optional **HTTPS** (operator-supplied PEM
+via `[tool.auntiepypi.local].cert` / `.key`, loaded with
+`ssl.SSLContext.load_cert_chain`, TLS 1.2 floor) and **HTTP Basic auth**
+(Apache htpasswd file, bcrypt-only, via
+`[tool.auntiepypi.local].htpasswd`). Public binding (non-loopback) is
+allowed when both are configured; either alone is rejected at
+config-load time with a `missing: …` tail naming the gap. The detection
+probe switches scheme based on `cfg.tls_enabled` and treats 401 as `up`
+when `cfg.auth_enabled` (a working auth gate is a stronger liveness
+signal than an open 200; the detector deliberately doesn't read
+htpasswd).
 
-`auntie publish`, HTTPS termination, and basic-auth are deferred to
-v0.7.0 (the auth + public-binding bundle). The mesh-aware service
+`bcrypt>=4.0,<5` becomes the **first runtime dependency** — stdlib has
+no htpasswd-compatible verifier and rolling our own bcrypt is
+malpractice. `cryptography` is dev-only (test cert fixture).
+
+`auntie publish` (write side) remains deferred — the v0.7.0 slice is
+"read-only safe to expose to the LAN," consistent with the small-
+landable-PR pattern from v0.5.0 and v0.6.0. The mesh-aware service
 registry is v1.0.0.
 
-See `docs/superpowers/specs/2026-05-01-auntiepypi-v0.6.0-local-server-design.md`
-for the full design rationale.
+See `docs/superpowers/specs/2026-05-02-auntiepypi-v0.7.0-tls-auth-design.md`
+for the full design rationale; v0.6.0's read-only loopback foundation
+is documented in
+`docs/superpowers/specs/2026-05-01-auntiepypi-v0.6.0-local-server-design.md`.
 
 This file describes the repository **as it exists on disk today**. When
 you edit, keep claims grounded in checked-in reality; the moment a
@@ -227,10 +234,17 @@ burned on the `agentpypi → auntiepypi` rename. The table below uses
    `auntie` strategy wraps `command.py` with a derived argv. Loopback-
    only binding; `"auntie"` is a reserved server name. See spec
    `docs/superpowers/specs/2026-05-01-auntiepypi-v0.6.0-local-server-design.md`.
-7. **semver 0.7.0 — auth + public binding.** Basic-auth and HTTPS
-   termination, lifting the loopback restriction. `auntie publish`
-   upload path lands here too.
-8. **semver 1.0.0 — mesh-aware.** Local index discoverable via Culture-mesh
+7. **semver 0.7.0 — HTTPS + basic-auth (shipped).** Operator-supplied
+   PEM cert + key, Apache htpasswd file (bcrypt-only). Public binding
+   allowed when both are configured; either alone rejected at
+   config-load time. `bcrypt>=4.0,<5` becomes the first runtime
+   dependency. Read-only invariant preserved; `auntie publish` slid
+   forward to v0.8.0. See spec
+   `docs/superpowers/specs/2026-05-02-auntiepypi-v0.7.0-tls-auth-design.md`.
+8. **semver 0.8.0 — `auntie publish`.** Write side of the first-party
+   index. POST upload path with the same trust model as v0.7.0 (TLS
+   - Basic auth) plus an authorization step (which users can publish).
+9. **semver 1.0.0 — mesh-aware.** Local index discoverable via Culture-mesh
    service registry; trust boundary documented in `docs/threat-model.md`.
 
 This roadmap is descriptive of intent, not a commitment. Reorder or

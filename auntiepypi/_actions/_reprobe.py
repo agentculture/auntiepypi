@@ -33,14 +33,51 @@ class ReprobeResult:
 
 
 def _attempt(detection: Detection) -> ReprobeResult:
-    """Run one TCP+HTTP probe against *detection* and classify the result."""
-    outcome = probe_endpoint(detection.host, detection.port, path="/", timeout=_TIMEOUT)
+    """Run one TCP+HTTP probe against *detection* and classify the result.
+
+    For ``source="local"`` (the first-party auntie server) the probe
+    must mirror :func:`auntiepypi._detect._local.detect`'s semantics:
+    HTTPS scheme when TLS is configured, and 401 counts as ``up`` when
+    auth is configured. Otherwise ``command.start()`` /
+    ``auntie restart`` would report failure for a healthy HTTPS-only
+    or auth-gated server.
+    """
+    scheme = "http"
+    ssl_ctx = None
+    cfg_local = None
+    if detection.source == "local":
+        # Local import to avoid a circular ref between _actions/_reprobe
+        # and _detect/_config (which imports LocalConfig).
+        from auntiepypi._detect._config import load_local_config
+        from auntiepypi._detect._local import local_probe_scheme_and_context
+
+        cfg_local = load_local_config()
+        scheme, ssl_ctx = local_probe_scheme_and_context(cfg_local)
+
+    outcome = probe_endpoint(
+        detection.host,
+        detection.port,
+        path="/",
+        timeout=_TIMEOUT,
+        scheme=scheme,
+        ssl_context=ssl_ctx,
+    )
 
     if not outcome.tcp_open:
         return ReprobeResult(status="absent")
 
     if outcome.http_status is None:
         return ReprobeResult(status="down", detail=outcome.error or "http error")
+
+    if cfg_local is not None:
+        # Defer the local-server semantics (2xx OR 401-with-auth) to
+        # the shared classifier so this stays in lock-step with
+        # _detect/_local.detect().
+        from auntiepypi._detect._local import local_response_is_up
+
+        if local_response_is_up(outcome.http_status, cfg_local):
+            return ReprobeResult(status="up")
+        return ReprobeResult(status="down", detail=f"http {outcome.http_status}")
 
     if not 200 <= outcome.http_status < 300:
         return ReprobeResult(status="down", detail=f"http {outcome.http_status}")

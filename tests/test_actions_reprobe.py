@@ -52,9 +52,24 @@ def _detection(port: int, flavor: str = "pypiserver") -> Detection:
         flavor=flavor,
         host="127.0.0.1",
         port=port,
-        url=f"http://127.0.0.1:{port}/",
+        url=f"http://127.0.0.1:{port}/",  # NOSONAR python:S5332 - test fixture
         status="down",
         source="declared",
+    )
+
+
+def _fake_outcome(host: str, port: int, *, http_status: int, body: bytes = b""):
+    """Build a ProbeOutcome for tests. The URL is a fixture string only;
+    no network connection is made and no creds traverse it.
+    """
+    from auntiepypi._detect._http import ProbeOutcome
+
+    return ProbeOutcome(
+        url=f"http://{host}:{port}/",  # NOSONAR python:S5332 - test fixture
+        tcp_open=True,
+        http_status=http_status,
+        body=body,
+        error=None,
     )
 
 
@@ -74,6 +89,127 @@ def test_reprobe_flavor_mismatch(pypiserver_on_port):
     result = probe(det, budget_seconds=2.0)
     assert result.status == "down"
     assert "flavor" in (result.detail or "")
+
+
+# --------- v0.7.0: local-source detections respect TLS + auth ---------
+
+
+def test_reprobe_local_uses_https_when_tls_configured(monkeypatch, tmp_path):
+    """When source='local' and tls is configured, _attempt must probe https,
+    not http. Otherwise an HTTPS-only first-party server reprobes as down."""
+    cert = tmp_path / "c.pem"
+    key = tmp_path / "k.pem"
+    (tmp_path / "pyproject.toml").write_text(
+        f'[tool.auntiepypi.local]\ncert = "{cert}"\nkey = "{key}"\n'
+    )
+    monkeypatch.chdir(tmp_path)
+
+    captured = {}
+
+    def fake_probe(host, port, **kw):
+        captured["scheme"] = kw.get("scheme")
+        captured["ssl_context"] = kw.get("ssl_context")
+        return _fake_outcome(host, port, http_status=200, body=b"<html>")
+
+    from auntiepypi._actions import _reprobe
+
+    monkeypatch.setattr(_reprobe, "probe_endpoint", fake_probe)
+    detection = Detection(
+        name="auntie",
+        flavor="auntiepypi",
+        host="127.0.0.1",
+        port=3141,
+        url="https://127.0.0.1:3141/",
+        status="absent",
+        source="local",
+    )
+    result = _reprobe._attempt(detection)
+    assert result.status == "up"
+    assert captured["scheme"] == "https"
+    assert captured["ssl_context"] is not None
+
+
+def test_reprobe_local_treats_401_as_up_when_auth_configured(monkeypatch, tmp_path):
+    """A 401 from the first-party server with auth on means the auth gate
+    is working — must reprobe as up, otherwise `auntie up` falsely fails."""
+    htp = tmp_path / "htp"
+    (tmp_path / "pyproject.toml").write_text(f'[tool.auntiepypi.local]\nhtpasswd = "{htp}"\n')
+    monkeypatch.chdir(tmp_path)
+
+    def fake_probe(host, port, **kw):
+        return _fake_outcome(host, port, http_status=401, body=b"401\n")
+
+    from auntiepypi._actions import _reprobe
+
+    monkeypatch.setattr(_reprobe, "probe_endpoint", fake_probe)
+    detection = Detection(
+        name="auntie",
+        flavor="auntiepypi",
+        host="127.0.0.1",
+        port=3141,
+        url="http://127.0.0.1:3141/",  # NOSONAR python:S5332 - test fixture
+        status="absent",
+        source="local",
+    )
+    result = _reprobe._attempt(detection)
+    assert result.status == "up"
+
+
+def test_reprobe_local_401_without_auth_is_down(monkeypatch, tmp_path):
+    """Without auth configured, a 401 is anomalous and reports as down."""
+    monkeypatch.chdir(tmp_path)
+
+    def fake_probe(host, port, **kw):
+        return _fake_outcome(host, port, http_status=401, body=b"401\n")
+
+    from auntiepypi._actions import _reprobe
+
+    monkeypatch.setattr(_reprobe, "probe_endpoint", fake_probe)
+    detection = Detection(
+        name="auntie",
+        flavor="auntiepypi",
+        host="127.0.0.1",
+        port=3141,
+        url="http://127.0.0.1:3141/",  # NOSONAR python:S5332 - test fixture
+        status="absent",
+        source="local",
+    )
+    result = _reprobe._attempt(detection)
+    assert result.status == "down"
+
+
+def test_reprobe_declared_source_unchanged(monkeypatch, tmp_path):
+    """source='declared' must keep using plain HTTP regardless of pyproject."""
+    cert = tmp_path / "c.pem"
+    key = tmp_path / "k.pem"
+    (tmp_path / "pyproject.toml").write_text(
+        f'[tool.auntiepypi.local]\ncert = "{cert}"\nkey = "{key}"\n'
+    )
+    monkeypatch.chdir(tmp_path)
+
+    captured = {}
+
+    def fake_probe(host, port, **kw):
+        captured["scheme"] = kw.get("scheme")
+        captured["ssl_context"] = kw.get("ssl_context")
+        return _fake_outcome(host, port, http_status=200, body=b"<html>")
+
+    from auntiepypi._actions import _reprobe
+
+    monkeypatch.setattr(_reprobe, "probe_endpoint", fake_probe)
+    detection = Detection(
+        name="my-pypi",
+        flavor="pypiserver",
+        host="127.0.0.1",
+        port=8080,
+        url="http://127.0.0.1:8080/",  # NOSONAR python:S5332 - test fixture
+        status="absent",
+        source="declared",
+    )
+    _reprobe._attempt(detection)
+    # declared servers don't read the local config; plain HTTP.
+    assert captured["scheme"] == "http"
+    assert captured["ssl_context"] is None
 
 
 def test_reprobe_zero_budget_returns_immediately():
