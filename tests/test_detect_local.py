@@ -139,9 +139,7 @@ def test_local_detect_uses_http_when_tls_not_configured(tmp_path, monkeypatch):
 
 def test_local_detect_401_counts_as_up_when_auth_enabled(tmp_path, monkeypatch):
     htp = tmp_path / "htp"
-    (tmp_path / "pyproject.toml").write_text(
-        f'[tool.auntiepypi.local]\nhtpasswd = "{htp}"\n'
-    )
+    (tmp_path / "pyproject.toml").write_text(f'[tool.auntiepypi.local]\nhtpasswd = "{htp}"\n')
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
 

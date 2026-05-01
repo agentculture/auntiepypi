@@ -75,9 +75,7 @@ def _bcrypt_hash(password: str) -> bytes:
 
 
 def _basic_header(user: str, password: str) -> str:
-    return "Basic " + base64.b64encode(
-        f"{user}:{password}".encode("utf-8")
-    ).decode("ascii")
+    return "Basic " + base64.b64encode(f"{user}:{password}".encode("utf-8")).decode("ascii")
 
 
 def _wait_for_https(host: str, port: int, ctx: ssl.SSLContext, timeout: float = 3.0):
@@ -131,7 +129,7 @@ def test_serve_with_tls_and_auth_end_to_end(tmp_path: Path, tls_cert_pair):
     assert chosen_port, "server never bound"
     port = chosen_port[0]
 
-    client_ctx = ssl._create_unverified_context()  # NOSONAR python:S4830
+    client_ctx = ssl._create_unverified_context()  # noqa: S323  # NOSONAR python:S4830
     _wait_for_https(bind_host, port, client_ctx)
 
     try:
@@ -147,7 +145,8 @@ def test_serve_with_tls_and_auth_end_to_end(tmp_path: Path, tls_cert_pair):
         # Valid creds → 200
         conn = HTTPSConnection(bind_host, port, context=client_ctx, timeout=2)
         conn.request(
-            "GET", "/simple/",
+            "GET",
+            "/simple/",
             headers={"Authorization": _basic_header("alice", "secret")},
         )
         resp = conn.getresponse()

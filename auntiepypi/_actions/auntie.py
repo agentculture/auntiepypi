@@ -73,13 +73,14 @@ def _verify_tls_auth_paths(cfg: LocalConfig) -> ActionResult | None:
     config doesn't strand the operator's declared mirrors.
     """
     if cfg.tls_enabled:
-        assert cfg.cert is not None and cfg.key is not None  # invariant
+        # tls_enabled is True only when both cert and key are set.
+        assert cfg.cert is not None and cfg.key is not None  # noqa: S101
         for path, label in ((cfg.cert, "cert"), (cfg.key, "key")):
             err = _check_readable(path, label)
             if err is not None:
                 return ActionResult(ok=False, detail=err)
     if cfg.auth_enabled:
-        assert cfg.htpasswd is not None  # invariant
+        assert cfg.htpasswd is not None  # noqa: S101 - invariant tripwire
         err = _check_readable(cfg.htpasswd, "htpasswd")
         if err is not None:
             return ActionResult(ok=False, detail=err)

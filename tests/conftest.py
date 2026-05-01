@@ -85,9 +85,7 @@ def tls_cert_pair(tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, Path]
     key_path = out_dir / "key.pem"
 
     key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-    subject = issuer = x509.Name(
-        [x509.NameAttribute(NameOID.COMMON_NAME, "auntiepypi-test")]
-    )
+    subject = issuer = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "auntiepypi-test")])
     now = datetime.datetime.now(datetime.timezone.utc)
     cert = (
         x509.CertificateBuilder()

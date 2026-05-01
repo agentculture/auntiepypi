@@ -70,15 +70,11 @@ def parse_htpasswd(path: Path) -> dict[str, bytes]:
                 continue
             sep = line.find(b":")
             if sep < 0:
-                raise HtpasswdError(
-                    f"{path}: line {lineno}: missing ':' separator"
-                )
+                raise HtpasswdError(f"{path}: line {lineno}: missing ':' separator")
             user_b = line[:sep]
             hash_b = line[sep + 1 :]
             if not user_b or not hash_b:
-                raise HtpasswdError(
-                    f"{path}: line {lineno}: empty user or hash"
-                )
+                raise HtpasswdError(f"{path}: line {lineno}: empty user or hash")
             if not hash_b.startswith(_BCRYPT_PREFIXES):
                 raise HtpasswdError(
                     f"{path}: line {lineno}: only bcrypt entries "
@@ -126,10 +122,6 @@ class _AuthCache:
             while len(self._store) > self._maxsize:
                 self._store.popitem(last=False)
 
-    def clear(self) -> None:
-        with self._lock:
-            self._store.clear()
-
 
 _cache = _AuthCache()
 
@@ -155,7 +147,9 @@ def verify_basic(raw_header: str, htpasswd_map: dict[str, bytes]) -> bool:
     payload = raw_header[len(_BASIC_PREFIX) :].strip()
     try:
         decoded = base64.b64decode(payload, validate=True)
-    except (binascii.Error, ValueError):
+    except binascii.Error:
+        # binascii.Error is a subclass of ValueError; catching the more
+        # specific exception is sufficient and clearer.
         return False
     sep = decoded.find(b":")
     if sep < 0:

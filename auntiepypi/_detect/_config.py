@@ -301,9 +301,7 @@ def _validate_local_path_field(value: object, key: str) -> Path:
     the strategy.
     """
     if not isinstance(value, str) or not value:
-        raise ServerConfigError(
-            f"[tool.auntiepypi.local] {key!r} must be a non-empty string path"
-        )
+        raise ServerConfigError(f"[tool.auntiepypi.local] {key!r} must be a non-empty string path")
     return Path(value).expanduser()
 
 

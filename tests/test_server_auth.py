@@ -52,11 +52,7 @@ def test_parse_htpasswd_skips_blank_lines_and_comments(tmp_path: Path):
     h = _bcrypt_hash("x")
     htp = tmp_path / "htp"
     htp.write_bytes(
-        b"# leading comment\n"
-        b"\n"
-        b"  \n"
-        b"alice:" + h + b"\n"
-        b"# trailing comment\n"
+        b"# leading comment\n" b"\n" b"  \n" b"alice:" + h + b"\n" b"# trailing comment\n"
     )
     table = parse_htpasswd(htp)
     assert table.keys() == {"alice"}
@@ -123,6 +119,23 @@ def test_parse_htpasswd_line_number_in_error(tmp_path: Path):
         parse_htpasswd(htp)
 
 
+def test_parse_htpasswd_rejects_empty_user(tmp_path: Path):
+    """`:hash` with no user name is rejected."""
+    h = _bcrypt_hash("x")
+    htp = tmp_path / "htp"
+    htp.write_bytes(b":" + h + b"\n")
+    with pytest.raises(HtpasswdError, match="empty user or hash"):
+        parse_htpasswd(htp)
+
+
+def test_parse_htpasswd_rejects_empty_hash(tmp_path: Path):
+    """`alice:` with no hash is rejected."""
+    htp = tmp_path / "htp"
+    htp.write_bytes(b"alice:\n")
+    with pytest.raises(HtpasswdError, match="empty user or hash"):
+        parse_htpasswd(htp)
+
+
 # --------- verify_basic ---------
 
 
@@ -170,6 +183,22 @@ def test_verify_basic_password_with_colon_works():
     assert verify_basic(_basic_header("alice", "pa:ss:wd"), table) is True
 
 
+def test_verify_basic_decoded_payload_without_colon_returns_false():
+    """A valid base64 string that decodes to bytes with no `:` is malformed."""
+    bad = "Basic " + base64.b64encode(b"no-colon-here").decode("ascii")
+    table = {"alice": _bcrypt_hash("secret")}
+    assert verify_basic(bad, table) is False
+
+
+def test_verify_basic_malformed_hash_returns_false_not_500():
+    """If the htpasswd_map somehow contains a malformed hash, bcrypt
+    raises ValueError; we catch it and return False instead of 500.
+    Defence in depth — parse_htpasswd already screens prefixes.
+    """
+    table = {"alice": b"$2b$malformed-not-real-hash"}
+    assert verify_basic(_basic_header("alice", "secret"), table) is False
+
+
 # --------- _AuthCache ---------
 
 
@@ -198,8 +227,7 @@ def test_authcache_evicts_when_full():
 def test_authcache_expires_after_ttl(monkeypatch):
     cache = _AuthCache(maxsize=8, ttl_seconds=1)
     fake_time = [1000.0]
-    monkeypatch.setattr("auntiepypi._server._auth.time.monotonic",
-                        lambda: fake_time[0])
+    monkeypatch.setattr("auntiepypi._server._auth.time.monotonic", lambda: fake_time[0])
     cache.put("k", "u", b"h")
     assert cache.get("k") == ("u", b"h")
     fake_time[0] += 2.0  # past TTL

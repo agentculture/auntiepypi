@@ -364,7 +364,7 @@ def test_load_local_config_non_loopback_with_full_bundle_ok(tmp_path, monkeypatc
         """,
     )
     cfg = load_local_config(tmp_path)
-    assert cfg.host == "0.0.0.0"
+    assert cfg.host == "0.0.0.0"  # noqa: S104
     assert cfg.tls_enabled is True
     assert cfg.auth_enabled is True
 

@@ -31,6 +31,18 @@ from auntiepypi._detect._http import probe_endpoint
 _TIMEOUT = 1.0
 
 
+def _unverified_self_probe_context() -> ssl.SSLContext:
+    """Build an SSL context that skips cert verification.
+
+    Used only by ``detect()`` for the self-probe of our own first-party
+    listener — the ``(host, port)`` came from our own pyproject, so this
+    is not a trust decision. The cert may be self-signed in mesh-internal
+    use; verifying would force operators to plumb their internal CA
+    into auntie for no upside.
+    """
+    return ssl._create_unverified_context()  # noqa: S323  # nosec B323  # NOSONAR python:S4830
+
+
 def detect() -> Detection:
     """Return one Detection for the first-party server."""
     # Local import so module load doesn't reach for pyproject if the
@@ -40,16 +52,16 @@ def detect() -> Detection:
     cfg = load_local_config()
     if cfg.tls_enabled:
         scheme = "https"
-        # Self-probe of our own listener; cert may be self-signed.
-        # Verifying would force operators to make their internal CA
-        # trusted by the auntie process, which has no upside here.
-        ssl_ctx = ssl._create_unverified_context()  # NOSONAR python:S4830
+        ssl_ctx = _unverified_self_probe_context()
     else:
         scheme = "http"
         ssl_ctx = None
     outcome = probe_endpoint(
-        cfg.host, cfg.port,
-        timeout=_TIMEOUT, scheme=scheme, ssl_context=ssl_ctx,
+        cfg.host,
+        cfg.port,
+        timeout=_TIMEOUT,
+        scheme=scheme,
+        ssl_context=ssl_ctx,
     )
     common = {
         "name": "auntie",

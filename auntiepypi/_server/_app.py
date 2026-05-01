@@ -182,9 +182,7 @@ def make_handler(
             invariant is ever violated by a future refactor.
             """
             assert htpasswd_map is not None  # noqa: S101 - invariant tripwire
-            return verify_basic(
-                self.headers.get("Authorization", ""), htpasswd_map
-            )
+            return verify_basic(self.headers.get("Authorization", ""), htpasswd_map)
 
         def _send_401(self) -> None:
             """401 + WWW-Authenticate per RFC 7617.

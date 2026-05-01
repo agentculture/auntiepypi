@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2026-05-02
+
+### Added
+
+- HTTPS termination on the first-party server. `[tool.auntiepypi.local].cert` and `.key` point at operator-supplied PEM files, loaded via `ssl.SSLContext.load_cert_chain` with `minimum_version` pinned to TLS 1.2. No auto-generation; operator runs `mkcert` / `certbot` / their internal CA.
+- HTTP Basic auth on the first-party server. `[tool.auntiepypi.local].htpasswd` points at an Apache htpasswd file (bcrypt-only — `$2y$` / `$2b$` / `$2a$` entries). The parser rejects non-bcrypt lines at load time with the offending line number; silent skip would be how auth bypasses ship.
+- Public binding (non-loopback) is now allowed when both TLS and Basic auth are configured. The truth table is enforced at config-load time: loopback hosts always pass; non-loopback requires both `cert+key` AND `htpasswd`. Either alone raises `ServerConfigError` with a `missing: …` tail naming the gap.
+- `_server/_tls.py` — `build_ssl_context(cert, key)` builder. Stdlib-only.
+- `_server/_auth.py` — `parse_htpasswd`, `verify_basic`, `_AuthCache` (positive-only LRU; 60 s TTL; 128 max; threadsafe). Cache stores `(timestamp, user, expected_hash)` so credential rotation, user removal, or a fresh map all naturally invalidate.
+- HTTPS-aware detection probe. `_detect/_http.format_http_url` and `probe_endpoint` accept a `scheme` keyword (default `"http"` — backward-compatible) and an optional `ssl_context`. `_detect/_local.detect()` switches scheme based on `cfg.tls_enabled`; with TLS on, it uses an unverified SSL context (self-probe of our own listener — not a trust decision).
+- 401-as-up: when `cfg.auth_enabled`, a 401 from the local server counts as `status="up"` because a working auth gate is a stronger liveness signal than an open 200. The detector deliberately doesn't read htpasswd to extract creds.
+- `bcrypt>=4.0,<5` becomes the **first runtime dependency**. Spec captures the rationale: stdlib has no htpasswd-compatible verifier (`crypt` removed in 3.13; `hashlib.scrypt` isn't htpasswd format), and rolling our own bcrypt is malpractice. `cryptography` is added to `[dependency-groups].dev` only — used by a session-scoped self-signed cert fixture for tls/auth tests.
+
+### Changed
+
+- `LocalConfig` (`auntiepypi/_server/_config.py`) gains three optional `Path | None` fields (`cert`, `key`, `htpasswd`) and two derived properties (`tls_enabled` requires both cert+key; `auth_enabled` is `htpasswd is not None`).
+- `[tool.auntiepypi.local].host` validator's error message is rewritten — previously named v0.7.0 as the unlock; now describes the truth table directly.
+- `_server.serve()` accepts `ssl_context` and `htpasswd_map` kwargs; both default to None so v0.6.0 callers preserve plain-HTTP, unauthed behavior.
+- `_server/__main__` adds `--cert`, `--key`, `--htpasswd` flags; exits 2 with a clear stderr message if exactly one of `--cert`/`--key` is set.
+- `_actions/auntie._argv()` conditionally appends the new flags. `auntie.start()` runs a pre-flight readability check on configured TLS/auth paths via `_verify_tls_auth_paths()`; a missing file surfaces as `ActionResult(ok=False)` instead of a raise, preserving `auntie up --all`'s independent-dispatch semantics.
+
+### Fixed
+
+- N/A (no carryover bugs from v0.6.0).
+
 ## [0.6.0] - 2026-05-01
 
 ### Added

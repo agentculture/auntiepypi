@@ -294,7 +294,7 @@ Out of scope (deferred to later milestones or never):
 
 - The `[tool.auntiepypi.local].host` validator's error message is
   rewritten. Previously it ended with "v0.6.0 binds loopback only (auth
-  + TLS land in v0.7.0)." Now it ends with the truth-table-aware
+  - TLS land in v0.7.0)." Now it ends with the truth-table-aware
   diagnostic naming the missing field group(s).
 - `format_http_url` and `probe_endpoint` gain a `scheme` keyword
   parameter with `"http"` default. All v0.6.0 call sites

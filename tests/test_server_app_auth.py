@@ -20,9 +20,7 @@ def _bcrypt_hash(password: str) -> bytes:
 
 
 def _basic_header(user: str, password: str) -> str:
-    return "Basic " + base64.b64encode(
-        f"{user}:{password}".encode("utf-8")
-    ).decode("ascii")
+    return "Basic " + base64.b64encode(f"{user}:{password}".encode("utf-8")).decode("ascii")
 
 
 @pytest.fixture
@@ -85,7 +83,8 @@ def test_wrong_password_returns_401(served_with_auth):
 def test_unknown_user_returns_401(served_with_auth):
     port, _, _ = served_with_auth
     status, _, _ = _get(
-        port, "/simple/",
+        port,
+        "/simple/",
         headers={"Authorization": _basic_header("eve", "secret")},
     )
     assert status == 401
@@ -93,18 +92,14 @@ def test_unknown_user_returns_401(served_with_auth):
 
 def test_malformed_b64_returns_401_not_500(served_with_auth):
     port, _, _ = served_with_auth
-    status, _, _ = _get(
-        port, "/simple/", headers={"Authorization": "Basic not_b64!!"}
-    )
+    status, _, _ = _get(port, "/simple/", headers={"Authorization": "Basic not_b64!!"})
     assert status == 401
 
 
 def test_bearer_token_returns_401(served_with_auth):
     """Non-Basic schemes get 401 too (we only support Basic)."""
     port, _, _ = served_with_auth
-    status, _, _ = _get(
-        port, "/simple/", headers={"Authorization": "Bearer some-token"}
-    )
+    status, _, _ = _get(port, "/simple/", headers={"Authorization": "Bearer some-token"})
     assert status == 401
 
 
@@ -114,7 +109,8 @@ def test_bearer_token_returns_401(served_with_auth):
 def test_valid_creds_returns_200(served_with_auth):
     port, _, _ = served_with_auth
     status, _, _ = _get(
-        port, "/simple/",
+        port,
+        "/simple/",
         headers={"Authorization": _basic_header("alice", "secret")},
     )
     assert status == 200
@@ -125,7 +121,8 @@ def test_valid_creds_serves_file(served_with_auth):
     wheel = root / "demo-1.0-py3-none-any.whl"
     wheel.write_bytes(b"PK\x03\x04demo-bytes")
     status, body, _ = _get(
-        port, "/files/demo-1.0-py3-none-any.whl",
+        port,
+        "/files/demo-1.0-py3-none-any.whl",
         headers={"Authorization": _basic_header("alice", "secret")},
     )
     assert status == 200
@@ -136,7 +133,8 @@ def test_valid_creds_serves_project_page(served_with_auth):
     port, root, _ = served_with_auth
     (root / "requests-2.31.0-py3-none-any.whl").touch()
     status, body, _ = _get(
-        port, "/simple/requests/",
+        port,
+        "/simple/requests/",
         headers={"Authorization": _basic_header("bob", "hunter2")},
     )
     assert status == 200
@@ -150,7 +148,8 @@ def test_auth_does_not_bypass_path_traversal(served_with_auth):
     """Valid creds + path traversal still 404 — defense in depth."""
     port, _, _ = served_with_auth
     status, _, _ = _get(
-        port, "/files/../etc/passwd",
+        port,
+        "/files/../etc/passwd",
         headers={"Authorization": _basic_header("alice", "secret")},
     )
     assert status == 404
@@ -162,7 +161,9 @@ def test_post_still_405_with_auth(served_with_auth):
     conn = HTTPConnection("127.0.0.1", port, timeout=5)
     try:
         conn.request(
-            "POST", "/simple/", body=b"",
+            "POST",
+            "/simple/",
+            body=b"",
             headers={"Authorization": _basic_header("alice", "secret")},
         )
         resp = conn.getresponse()

@@ -53,10 +53,14 @@ def test_parser_tls_auth_flags_pass_through(tmp_path: Path):
     htp = tmp_path / "htp"
     args = server_main._parser().parse_args(
         [
-            "--root", str(tmp_path),
-            "--cert", str(cert),
-            "--key", str(key),
-            "--htpasswd", str(htp),
+            "--root",
+            str(tmp_path),
+            "--cert",
+            str(cert),
+            "--key",
+            str(key),
+            "--htpasswd",
+            str(htp),
         ]
     )
     assert args.cert == cert
@@ -96,17 +100,13 @@ def test_main_calls_serve(monkeypatch, tmp_path):
 
 def test_main_rejects_cert_without_key(tmp_path: Path):
     with pytest.raises(SystemExit) as exc:
-        server_main.main(
-            ["--root", str(tmp_path), "--cert", str(tmp_path / "c.pem")]
-        )
+        server_main.main(["--root", str(tmp_path), "--cert", str(tmp_path / "c.pem")])
     assert exc.value.code == 2
 
 
 def test_main_rejects_key_without_cert(tmp_path: Path):
     with pytest.raises(SystemExit) as exc:
-        server_main.main(
-            ["--root", str(tmp_path), "--key", str(tmp_path / "k.pem")]
-        )
+        server_main.main(["--root", str(tmp_path), "--key", str(tmp_path / "k.pem")])
     assert exc.value.code == 2
 
 
@@ -120,9 +120,12 @@ def test_main_builds_ssl_context_when_pair_set(monkeypatch, tmp_path, tls_cert_p
     monkeypatch.setattr(server_main, "serve", fake_serve)
     server_main.main(
         [
-            "--root", str(tmp_path),
-            "--cert", str(cert),
-            "--key", str(key),
+            "--root",
+            str(tmp_path),
+            "--cert",
+            str(cert),
+            "--key",
+            str(key),
         ]
     )
     import ssl as _ssl
@@ -143,9 +146,7 @@ def test_main_parses_htpasswd_when_set(monkeypatch, tmp_path):
         captured["htpasswd_map"] = htpasswd_map
 
     monkeypatch.setattr(server_main, "serve", fake_serve)
-    server_main.main(
-        ["--root", str(tmp_path), "--htpasswd", str(htp)]
-    )
+    server_main.main(["--root", str(tmp_path), "--htpasswd", str(htp)])
     assert isinstance(captured["htpasswd_map"], dict)
     assert "alice" in captured["htpasswd_map"]
 
