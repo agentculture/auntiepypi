@@ -5,11 +5,17 @@ first to distinguish "nothing listening" from "HTTP misbehaving"; then
 HTTP GET with a small body read for flavor fingerprinting.
 
 Stdlib only. No retries. Caller-supplied timeout enforced on both stages.
+
+v0.7.0 additions: ``probe_endpoint`` accepts a ``scheme`` keyword
+(``"http"`` default; ``"https"`` for TLS) and an optional
+``ssl_context`` for HTTPS probes (typically an unverified context for
+self-probes of the local server).
 """
 
 from __future__ import annotations
 
 import socket
+import ssl
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
@@ -20,15 +26,22 @@ _MAX_BODY_BYTES = 4096
 _USER_AGENT = f"auntie/{__version__}"
 
 
-def format_http_url(host: str, port: int, path: str = "/") -> str:
-    """Build ``http://host:port<path>`` with IPv6 bracketing.
+def format_http_url(
+    host: str,
+    port: int,
+    path: str = "/",
+    *,
+    scheme: str = "http",
+) -> str:
+    """Build ``<scheme>://host:port<path>`` with IPv6 bracketing.
 
     Bare ``::1`` (and other IPv6 literals) must be wrapped in ``[...]``
     in URLs (RFC 3986 §3.2.2). Hostnames and IPv4 literals pass through
-    unchanged.
+    unchanged. ``scheme`` defaults to ``"http"``; pass ``"https"`` for
+    TLS endpoints.
     """
     bracketed = f"[{host}]" if ":" in host else host
-    return f"http://{bracketed}:{port}{path}"  # NOSONAR S5332 (localhost-only)
+    return f"{scheme}://{bracketed}:{port}{path}"  # NOSONAR S5332 (localhost-only)
 
 
 @dataclass(frozen=True)
@@ -73,21 +86,27 @@ def probe_endpoint(
     *,
     path: str = "/",
     timeout: float = 1.0,
+    scheme: str = "http",
+    ssl_context: ssl.SSLContext | None = None,
 ) -> ProbeOutcome:
-    """Probe ``http://host:port<path>``.
+    """Probe ``<scheme>://host:port<path>``.
 
     Returns a :class:`ProbeOutcome` with the TCP/HTTP results. Never
-    raises — every failure mode maps onto a field.
+    raises — every failure mode maps onto a field. ``scheme="https"``
+    routes through ``urllib.request`` with the supplied
+    ``ssl_context`` (or stdlib defaults when None).
     """
     # `pypi-server` and `devpi-server` default to plain HTTP on localhost;
-    # HTTPS is not the protocol these servers speak in their default config.
-    url = format_http_url(host, port, path)  # noqa: S310 nosec B310
+    # HTTPS is the v0.7.0 first-party server's mode when configured.
+    url = format_http_url(host, port, path, scheme=scheme)  # noqa: S310 nosec B310
     if not _tcp_open(host, port, timeout):
         return ProbeOutcome(url=url, tcp_open=False, http_status=None, body=None, error=None)
     req = urllib.request.Request(url, headers={"User-Agent": _USER_AGENT, "Accept": "*/*"})
     try:
-        # URL is host+port-from-trusted-config + literal http:// scheme.
-        with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310 # nosec B310
+        # URL is host+port-from-trusted-config + scheme set by caller.
+        with urllib.request.urlopen(  # noqa: S310 # nosec B310
+            req, timeout=timeout, context=ssl_context
+        ) as resp:
             return ProbeOutcome(
                 url=url,
                 tcp_open=True,
@@ -107,7 +126,7 @@ def probe_endpoint(
             body=body,
             error=None,
         )
-    except OSError as err:  # URLError, timeout, etc.
+    except (OSError, ssl.SSLError) as err:  # URLError, timeout, TLS errors
         return ProbeOutcome(
             url=url,
             tcp_open=True,
