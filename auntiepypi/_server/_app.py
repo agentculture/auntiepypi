@@ -14,9 +14,13 @@ Three routes (since v0.6.0):
 Any other path or non-GET method → 404 / 405.
 
 v0.7.0 adds an optional auth gate: when ``make_handler(root,
-htpasswd_map=...)`` is called with a non-None map, every request must
-present a valid ``Authorization: Basic`` header (verified against
-:mod:`._auth`). Missing or invalid → 401 with ``WWW-Authenticate``.
+htpasswd_map=...)`` is called with a non-None map, every ``GET``
+request must present a valid ``Authorization: Basic`` header
+(verified against :mod:`._auth`). Missing or invalid → 401 with
+``WWW-Authenticate``. Non-GET methods fall through to
+``BaseHTTPRequestHandler``'s default (typically 501 Not Implemented)
+because the read-only server has no other verbs to gate; the auth
+check lives on the GET dispatch and is not reached on other methods.
 When the map is None, the handler is unauthenticated (v0.6.0
 behavior preserved).
 

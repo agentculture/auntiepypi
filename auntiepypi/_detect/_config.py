@@ -305,6 +305,22 @@ def _validate_local_path_field(value: object, key: str) -> Path:
     return Path(value).expanduser()
 
 
+def _validate_local_tls_pair(cert: Path | None, key: Path | None) -> None:
+    """Enforce TLS pairing — both ``cert`` and ``key`` or neither.
+
+    Independent of host: a half-configured TLS pair on loopback would
+    silently start in plain HTTP (because :pyattr:`LocalConfig.tls_enabled`
+    requires both fields), which is worse than an explicit error.
+    """
+    if (cert is None) == (key is None):
+        return
+    missing = "key" if cert is not None else "cert"
+    raise ServerConfigError(
+        f"[tool.auntiepypi.local] TLS pair incomplete: 'cert' and 'key' must "
+        f"be set together. missing: {missing}."
+    )
+
+
 def _validate_local_lift_rule(
     host: str,
     cert: Path | None,
@@ -384,9 +400,11 @@ def load_local_config(start: Path | None = None) -> LocalConfig:
     if "htpasswd" in local_table:
         kwargs["htpasswd"] = _validate_local_path_field(local_table["htpasswd"], "htpasswd")
 
-    # Cross-field: enforce v0.7.0 D4 lift rule. Defaults to loopback
-    # host so the rule never fires when the table is absent or omits
-    # everything except (e.g.) port/root.
+    # Cross-field validation. TLS pairing is host-independent — a
+    # loopback config with only `cert` (no `key`) would otherwise be
+    # silently ignored because ``tls_enabled`` requires both. The
+    # lift rule then runs on top of a known-consistent TLS state.
+    _validate_local_tls_pair(cert=kwargs.get("cert"), key=kwargs.get("key"))
     _validate_local_lift_rule(
         host=kwargs.get("host", LocalConfig.host),
         cert=kwargs.get("cert"),

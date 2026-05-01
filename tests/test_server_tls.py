@@ -71,7 +71,12 @@ def test_build_ssl_context_minimum_version_pinned(tls_cert_pair):
 
 
 def _bcrypt_hash(password: str) -> bytes:
-    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt(rounds=4))
+    # cost-4: test-fixture speed; production uses ≥12 (verify_basic
+    # honors whatever cost is in the stored hash).
+    return bcrypt.hashpw(  # NOSONAR python:S5344
+        password.encode("utf-8"),
+        bcrypt.gensalt(rounds=4),  # NOSONAR python:S5344
+    )
 
 
 def _basic_header(user: str, password: str) -> str:
@@ -88,26 +93,29 @@ def _wait_for_https(host: str, port: int, ctx: ssl.SSLContext, timeout: float = 
             conn.getresponse().read()
             conn.close()
             return
-        except (OSError, ssl.SSLError):
+        except OSError:  # ssl.SSLError is a subclass
             time.sleep(0.05)
     raise RuntimeError("server never became reachable")
 
 
 def test_serve_with_tls_and_auth_end_to_end(tmp_path: Path, tls_cert_pair):
-    """Spin up serve() with a real cert + htpasswd; exercise 200/401."""
+    """Spin up serve() with a real cert + htpasswd; exercise 200/401.
+
+    The factory captures the ``ThreadingHTTPServer`` instance so the
+    test can call ``shutdown()`` / ``server_close()`` deterministically
+    in ``finally``, then ``join()`` the runner thread. This avoids
+    leaking a background thread + bound socket across tests.
+    """
     cert, key = tls_cert_pair
     ssl_ctx = build_ssl_context(cert, key)
-    htpasswd_map = {"alice": _bcrypt_hash("secret")}
+    htpasswd_map = {"alice": _bcrypt_hash("fixture-pw")}
 
-    # Pick a port and let serve() do the rest.
     bind_host = "127.0.0.1"
-
-    # Capture the port chosen by ThreadingHTTPServer(("127.0.0.1", 0)).
-    chosen_port: list[int] = []
+    captured: dict[str, ThreadingHTTPServer] = {}
 
     def factory(addr, handler_cls):  # noqa: ANN001
         srv = ThreadingHTTPServer(addr, handler_cls)
-        chosen_port.append(srv.server_address[1])
+        captured["srv"] = srv
         return srv
 
     thread = threading.Thread(
@@ -124,37 +132,42 @@ def test_serve_with_tls_and_auth_end_to_end(tmp_path: Path, tls_cert_pair):
 
     # Wait for bind.
     deadline = time.monotonic() + 3.0
-    while not chosen_port and time.monotonic() < deadline:
+    while "srv" not in captured and time.monotonic() < deadline:
         time.sleep(0.05)
-    assert chosen_port, "server never bound"
-    port = chosen_port[0]
+    assert "srv" in captured, "server never bound"
+    srv = captured["srv"]
+    port = srv.server_address[1]
 
     client_ctx = ssl._create_unverified_context()  # noqa: S323  # NOSONAR python:S4830
-    _wait_for_https(bind_host, port, client_ctx)
-
     try:
+        _wait_for_https(bind_host, port, client_ctx)
+
         # No creds → 401
         conn = HTTPSConnection(bind_host, port, context=client_ctx, timeout=2)
-        conn.request("GET", "/simple/")
-        resp = conn.getresponse()
-        assert resp.status == 401
-        assert "Basic" in resp.getheader("WWW-Authenticate")
-        resp.read()
-        conn.close()
+        try:
+            conn.request("GET", "/simple/")
+            resp = conn.getresponse()
+            assert resp.status == 401
+            assert "Basic" in resp.getheader("WWW-Authenticate")
+            resp.read()
+        finally:
+            conn.close()
 
         # Valid creds → 200
         conn = HTTPSConnection(bind_host, port, context=client_ctx, timeout=2)
-        conn.request(
-            "GET",
-            "/simple/",
-            headers={"Authorization": _basic_header("alice", "secret")},
-        )
-        resp = conn.getresponse()
-        assert resp.status == 200
-        resp.read()
-        conn.close()
+        try:
+            conn.request(
+                "GET",
+                "/simple/",
+                headers={"Authorization": _basic_header("alice", "fixture-pw")},
+            )
+            resp = conn.getresponse()
+            assert resp.status == 200
+            resp.read()
+        finally:
+            conn.close()
     finally:
-        # ThreadingHTTPServer accepted via factory has no clean shutdown
-        # path from here; the daemon thread will exit when the test
-        # process ends. We close any in-flight client conns above.
-        pass
+        # Clean shutdown — serve() unblocks from serve_forever().
+        srv.shutdown()
+        thread.join(timeout=5)
+        assert not thread.is_alive(), "serve() did not exit cleanly"

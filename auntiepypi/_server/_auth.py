@@ -81,7 +81,13 @@ def parse_htpasswd(path: Path) -> dict[str, bytes]:
                     "($2y$/$2b$/$2a$) supported; regenerate with "
                     "`htpasswd -B`"
                 )
-            table[user_b.decode("utf-8")] = hash_b
+            try:
+                user = user_b.decode("utf-8")
+            except UnicodeDecodeError as err:
+                raise HtpasswdError(
+                    f"{path}: line {lineno}: username is not valid UTF-8 ({err})"
+                ) from err
+            table[user] = hash_b
     return table
 
 

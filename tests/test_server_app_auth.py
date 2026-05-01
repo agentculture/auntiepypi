@@ -16,7 +16,16 @@ from auntiepypi._server._app import make_handler
 
 
 def _bcrypt_hash(password: str) -> bytes:
-    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt(rounds=4))
+    """Test-only bcrypt hash; cost-4 keeps the suite fast.
+
+    Production cost (≥12) would add ~250 ms per test. ``verify_basic``
+    derives cost from the stored hash, so cost-12 callers behave
+    identically — the test fixtures don't weaken the production path.
+    """
+    return bcrypt.hashpw(  # NOSONAR python:S5344 - test fixture; production cost ≥ 12
+        password.encode("utf-8"),
+        bcrypt.gensalt(rounds=4),  # NOSONAR python:S5344
+    )
 
 
 def _basic_header(user: str, password: str) -> str:

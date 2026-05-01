@@ -137,7 +137,12 @@ def test_main_parses_htpasswd_when_set(monkeypatch, tmp_path):
     import bcrypt
 
     htp = tmp_path / "htp"
-    h = bcrypt.hashpw(b"secret", bcrypt.gensalt(rounds=4))
+    # Test fixture only — never written to disk outside tmp_path. Cost-4
+    # keeps the suite fast (production cost ≥ 12 via `htpasswd -B`).
+    h = bcrypt.hashpw(  # NOSONAR python:S5344
+        b"fixture-pw",  # NOSONAR python:S2068 - test fixture, not a credential
+        bcrypt.gensalt(rounds=4),  # NOSONAR python:S5344
+    )
     htp.write_bytes(b"alice:" + h + b"\n")
 
     captured: dict[str, object] = {}

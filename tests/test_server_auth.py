@@ -18,8 +18,18 @@ from auntiepypi._server._auth import (
 
 
 def _bcrypt_hash(password: str) -> bytes:
-    """Real bcrypt hash with a low cost (4) for fast tests."""
-    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt(rounds=4))
+    """Real bcrypt hash with a low cost (4) for fast tests.
+
+    Production cost (12) would add ~250 ms per test; rounds=4 keeps the
+    suite fast while still exercising real bcrypt. Production code in
+    ``_server/_auth.verify_basic`` calls ``bcrypt.checkpw``, which
+    derives cost from the stored hash, so cost-12 callers behave
+    identically.
+    """
+    return bcrypt.hashpw(  # NOSONAR python:S5344 - test fixture; production cost ≥ 12
+        password.encode("utf-8"),
+        bcrypt.gensalt(rounds=4),  # NOSONAR python:S5344
+    )
 
 
 def _basic_header(user: str, password: str) -> str:
@@ -51,9 +61,9 @@ def test_parse_htpasswd_multiple_users(tmp_path: Path):
 def test_parse_htpasswd_skips_blank_lines_and_comments(tmp_path: Path):
     h = _bcrypt_hash("x")
     htp = tmp_path / "htp"
-    htp.write_bytes(
-        b"# leading comment\n" b"\n" b"  \n" b"alice:" + h + b"\n" b"# trailing comment\n"
-    )
+    # Single contiguous bytes literal — implicit-concat would tickle Sonar
+    # S1825 and reads less clearly than one expression with `+`.
+    htp.write_bytes(b"# leading comment\n\n  \nalice:" + h + b"\n# trailing comment\n")
     table = parse_htpasswd(htp)
     assert table.keys() == {"alice"}
 
@@ -133,6 +143,17 @@ def test_parse_htpasswd_rejects_empty_hash(tmp_path: Path):
     htp = tmp_path / "htp"
     htp.write_bytes(b"alice:\n")
     with pytest.raises(HtpasswdError, match="empty user or hash"):
+        parse_htpasswd(htp)
+
+
+def test_parse_htpasswd_rejects_non_utf8_username(tmp_path: Path):
+    """A non-UTF-8 username raises HtpasswdError with line number, not
+    a raw UnicodeDecodeError."""
+    h = _bcrypt_hash("x")
+    htp = tmp_path / "htp"
+    # \xff is not a valid UTF-8 start byte.
+    htp.write_bytes(b"\xff\xfe:" + h + b"\n")
+    with pytest.raises(HtpasswdError, match=r"line 1.*not valid UTF-8"):
         parse_htpasswd(htp)
 
 

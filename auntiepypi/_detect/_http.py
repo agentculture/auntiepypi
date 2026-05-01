@@ -41,7 +41,10 @@ def format_http_url(
     TLS endpoints.
     """
     bracketed = f"[{host}]" if ":" in host else host
-    return f"{scheme}://{bracketed}:{port}{path}"  # NOSONAR S5332 (localhost-only)
+    # NOSONAR python:S5332 — `host` and `port` come from trusted local
+    # config (pyproject) or from auntie's own self-probe; this helper
+    # never builds URLs from untrusted user input.
+    return f"{scheme}://{bracketed}:{port}{path}"  # NOSONAR python:S5332
 
 
 @dataclass(frozen=True)
@@ -126,7 +129,7 @@ def probe_endpoint(
             body=body,
             error=None,
         )
-    except (OSError, ssl.SSLError) as err:  # URLError, timeout, TLS errors
+    except OSError as err:  # URLError / timeout / TLS errors all subclass OSError
         return ProbeOutcome(
             url=url,
             tcp_open=True,

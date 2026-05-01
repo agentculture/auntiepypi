@@ -465,3 +465,48 @@ def test_load_local_config_error_names_host_in_message(tmp_path):
     )
     with pytest.raises(ServerConfigError, match="'10.0.0.5'"):
         load_local_config(tmp_path)
+
+
+# --------- TLS pair must be both-or-neither, regardless of host ---------
+
+
+def test_load_local_config_loopback_with_cert_only_rejected(tmp_path):
+    """Loopback host + cert without key: half-TLS would be silently
+    ignored (tls_enabled requires both). Reject explicitly."""
+    _write_pyproject(
+        tmp_path,
+        """
+        [tool.auntiepypi.local]
+        host = "127.0.0.1"
+        cert = "/tmp/c.pem"
+        """,
+    )
+    with pytest.raises(ServerConfigError, match=r"TLS pair incomplete.*missing: key"):
+        load_local_config(tmp_path)
+
+
+def test_load_local_config_loopback_with_key_only_rejected(tmp_path):
+    _write_pyproject(
+        tmp_path,
+        """
+        [tool.auntiepypi.local]
+        host = "127.0.0.1"
+        key = "/tmp/k.pem"
+        """,
+    )
+    with pytest.raises(ServerConfigError, match=r"TLS pair incomplete.*missing: cert"):
+        load_local_config(tmp_path)
+
+
+def test_load_local_config_localhost_with_cert_only_rejected(tmp_path):
+    """Same rule applies to the localhost alias."""
+    _write_pyproject(
+        tmp_path,
+        """
+        [tool.auntiepypi.local]
+        host = "localhost"
+        cert = "/tmp/c.pem"
+        """,
+    )
+    with pytest.raises(ServerConfigError, match=r"TLS pair incomplete"):
+        load_local_config(tmp_path)

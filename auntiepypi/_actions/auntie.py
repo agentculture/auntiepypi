@@ -56,8 +56,11 @@ def _check_readable(path: Path, label: str) -> str | None:
     if not path.exists():
         return f"{label} path not found: {path}"
     try:
-        with path.open("rb"):
-            pass
+        # Open + immediately close — verifies the spawned subprocess
+        # would succeed at the same operation, without holding state.
+        # ``os.access`` would be cheaper but is TOCTOU-prone and lies
+        # about ACL-based denials on some platforms.
+        path.open("rb").close()
     except OSError as err:
         return f"{label} not readable ({path}): {err}"
     return None
