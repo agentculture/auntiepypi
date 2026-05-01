@@ -327,9 +327,7 @@ def _validate_local_publish_users(value: object) -> tuple[str, ...]:
     Returns a tuple of names. Empty list is allowed (= read-only mode).
     """
     if not isinstance(value, list):
-        raise ServerConfigError(
-            "[tool.auntiepypi.local] 'publish_users' must be a list of strings"
-        )
+        raise ServerConfigError("[tool.auntiepypi.local] 'publish_users' must be a list of strings")
     out: list[str] = []
     for i, item in enumerate(value):
         if not isinstance(item, str) or not item:
@@ -350,9 +348,7 @@ def _validate_local_max_upload_bytes(value: object) -> int:
     # bool is a subclass of int — reject it explicitly (would otherwise
     # let `max_upload_bytes = true` pass as 1).
     if not isinstance(value, int) or isinstance(value, bool):
-        raise ServerConfigError(
-            "[tool.auntiepypi.local] 'max_upload_bytes' must be an integer"
-        )
+        raise ServerConfigError("[tool.auntiepypi.local] 'max_upload_bytes' must be an integer")
     if value < 1024:
         raise ServerConfigError(
             f"[tool.auntiepypi.local] 'max_upload_bytes' must be >= 1024 (got {value})"
@@ -394,7 +390,7 @@ def _validate_publish_users_in_htpasswd(
 
     try:
         table = parse_htpasswd(htpasswd)
-    except (FileNotFoundError, OSError, HtpasswdError):
+    except (OSError, HtpasswdError):
         # Fall through — the strategy will report it at start-time.
         return
     missing = [name for name in publish_users if name not in table]

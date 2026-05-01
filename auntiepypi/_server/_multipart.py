@@ -50,9 +50,7 @@ class UploadFields:
     content: bytes
 
 
-def parse_multipart_upload(
-    content_type: str, raw_body: bytes, max_bytes: int
-) -> UploadFields:
+def parse_multipart_upload(content_type: str, raw_body: bytes, max_bytes: int) -> UploadFields:
     """Parse a twine-style upload body.
 
     :param content_type: the request's ``Content-Type`` header value
@@ -67,15 +65,11 @@ def parse_multipart_upload(
         body exceeding ``max_bytes``.
     """
     if not content_type or not content_type.lower().startswith("multipart/form-data"):
-        raise MultipartError(
-            f"expected multipart/form-data Content-Type, got {content_type!r}"
-        )
+        raise MultipartError(f"expected multipart/form-data Content-Type, got {content_type!r}")
     if "boundary=" not in content_type.lower():
         raise MultipartError("multipart Content-Type missing boundary parameter")
     if len(raw_body) > max_bytes:
-        raise MultipartError(
-            f"body too large ({len(raw_body)} > max_upload_bytes {max_bytes})"
-        )
+        raise MultipartError(f"body too large ({len(raw_body)} > max_upload_bytes {max_bytes})")
 
     # email.parser needs a header block on top of the body — synthesize one.
     synthetic = f"Content-Type: {content_type}\r\n\r\n".encode("utf-8") + raw_body
@@ -119,9 +113,7 @@ def _build_fields(fields: dict[str, bytes], filename: str | None) -> UploadField
     if content_b is None:
         raise MultipartError("missing required part: 'content'")
     if not filename:
-        raise MultipartError(
-            "'content' part is missing filename= in Content-Disposition"
-        )
+        raise MultipartError("'content' part is missing filename= in Content-Disposition")
     try:
         action = action_b.decode("utf-8")
         name = name_b.decode("utf-8")

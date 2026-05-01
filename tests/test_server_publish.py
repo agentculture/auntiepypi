@@ -24,7 +24,6 @@ import pytest
 from auntiepypi._server._app import make_handler
 from auntiepypi._server._publish import WriteResult, write_upload
 
-
 # --------- write_upload (writer-only) ---------
 
 
@@ -118,9 +117,7 @@ def _bcrypt_hash(password: str) -> bytes:
 
 
 def _basic_header(user: str, password: str) -> str:
-    return "Basic " + base64.b64encode(
-        f"{user}:{password}".encode("utf-8")
-    ).decode("ascii")
+    return "Basic " + base64.b64encode(f"{user}:{password}".encode("utf-8")).decode("ascii")
 
 
 _BOUNDARY = "----auntie-pytest-publish-boundary"
@@ -249,9 +246,7 @@ def test_post_returns_400_for_non_multipart_body(served_publish_ready):
     port, _ = served_publish_ready
     body = b'{"foo": "bar"}'
     auth = _basic_header("alice", "secret")
-    status, body_resp, _ = _post(
-        port, "/", body, _content_headers(body, "application/json", auth)
-    )
+    status, body_resp, _ = _post(port, "/", body, _content_headers(body, "application/json", auth))
     assert status == 400
     assert b"multipart" in body_resp
 

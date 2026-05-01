@@ -250,9 +250,7 @@ def make_handler(
             """
             if htpasswd_map is None:
                 return self._send_text(405, "405 Method Not Allowed")
-            user = authenticate_user(
-                self.headers.get("Authorization", ""), htpasswd_map
-            )
+            user = authenticate_user(self.headers.get("Authorization", ""), htpasswd_map)
             if user is None:
                 return self._send_401()
             if not publish_users:
@@ -266,14 +264,10 @@ def make_handler(
         def _handle_upload(self) -> None:
             ctype = self.headers.get("Content-Type", "")
             if not ctype.lower().startswith("multipart/form-data"):
-                return self._send_text(
-                    400, "expected Content-Type: multipart/form-data"
-                )
+                return self._send_text(400, "expected Content-Type: multipart/form-data")
             length = self._content_length_or_zero()
             if length > max_upload_bytes:
-                return self._send_text(
-                    413, f"upload too large (max {max_upload_bytes} bytes)"
-                )
+                return self._send_text(413, f"upload too large (max {max_upload_bytes} bytes)")
             # Counted read defends against missing/lying Content-Length:
             # we never read more than the cap regardless of what the
             # client claims.
@@ -282,17 +276,13 @@ def make_handler(
             except OSError as err:
                 return self._send_text(400, f"read error: {err}")
             if length and len(body) != length:
-                return self._send_text(
-                    400, "incomplete body (Content-Length mismatch)"
-                )
+                return self._send_text(400, "incomplete body (Content-Length mismatch)")
             try:
                 fields = parse_multipart_upload(ctype, body, max_upload_bytes)
             except MultipartError as err:
                 return self._send_text(400, str(err))
             if fields.action != "file_upload":
-                return self._send_text(
-                    400, f"expected :action=file_upload, got {fields.action!r}"
-                )
+                return self._send_text(400, f"expected :action=file_upload, got {fields.action!r}")
             if not _SAFE_FILENAME.match(fields.filename):
                 return self._send_text(400, f"invalid filename: {fields.filename!r}")
             parsed = parse_filename(fields.filename)
@@ -304,8 +294,7 @@ def make_handler(
             if normalize(fields.name) != normalize(project):
                 return self._send_text(
                     400,
-                    f"name field {fields.name!r} does not match filename "
-                    f"project {project!r}",
+                    f"name field {fields.name!r} does not match filename " f"project {project!r}",
                 )
             result = write_upload(resolved_root, fields.filename, fields.content)
             if result.status == 201:

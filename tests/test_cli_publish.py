@@ -17,7 +17,6 @@ from auntiepypi.cli._commands._publish_client import (
     post,
 )
 
-
 # --------- build_multipart cross-check via the server-side parser ---------
 
 
@@ -41,9 +40,7 @@ def test_build_multipart_roundtrips_through_server_parser():
 
 def test_build_multipart_handles_arbitrary_bytes():
     binary = bytes(range(256))
-    body, ctype = build_multipart(
-        binary, "mypkg-1.0-py3-none-any.whl", "mypkg", "1.0"
-    )
+    body, ctype = build_multipart(binary, "mypkg-1.0-py3-none-any.whl", "mypkg", "1.0")
     from auntiepypi._server._multipart import parse_multipart_upload
 
     fields = parse_multipart_upload(ctype, body, max_bytes=10 * 1024 * 1024)
@@ -66,9 +63,7 @@ def test_post_returns_status_and_body_on_2xx(monkeypatch):
         def read(self):
             return b'{"ok": true}'
 
-    monkeypatch.setattr(
-        "urllib.request.urlopen", lambda *a, **kw: _FakeResp()
-    )
+    monkeypatch.setattr("urllib.request.urlopen", lambda *a, **kw: _FakeResp())
     status, body = post(
         "http://127.0.0.1:3141/",  # noqa: S104  # NOSONAR python:S5332
         b"body",
@@ -158,9 +153,7 @@ def wheel_file(tmp_path: Path) -> Path:
 def loopback_pyproject(tmp_path: Path, monkeypatch) -> Path:
     """Set CWD to a tmp project with a loopback [tool.auntiepypi.local]."""
     (tmp_path / "pyproject.toml").write_text(
-        "[tool.auntiepypi.local]\n"
-        'host = "127.0.0.1"\n'
-        "port = 3141\n"
+        "[tool.auntiepypi.local]\n" 'host = "127.0.0.1"\n' "port = 3141\n"
     )
     monkeypatch.chdir(tmp_path)
     return tmp_path
@@ -170,9 +163,7 @@ def _args_for(path: Path, json_mode: bool = False) -> argparse.Namespace:
     return argparse.Namespace(path=path, json=json_mode, func=publish_cmd.cmd_publish)
 
 
-def test_cmd_publish_201_exits_0(
-    monkeypatch, wheel_file, loopback_pyproject, capsys
-):
+def test_cmd_publish_201_exits_0(monkeypatch, wheel_file, loopback_pyproject, capsys):
     monkeypatch.setenv("AUNTIE_PUBLISH_USER", "alice")
     monkeypatch.setenv("AUNTIE_PUBLISH_PASSWORD", "secret")
     monkeypatch.setattr(
@@ -199,9 +190,7 @@ def test_cmd_publish_201_exits_0(
 def test_cmd_publish_409_exits_1(monkeypatch, wheel_file, loopback_pyproject, capsys):
     monkeypatch.setenv("AUNTIE_PUBLISH_USER", "alice")
     monkeypatch.setenv("AUNTIE_PUBLISH_PASSWORD", "secret")
-    monkeypatch.setattr(
-        publish_cmd, "post", lambda *a, **kw: (409, b"file already exists\n")
-    )
+    monkeypatch.setattr(publish_cmd, "post", lambda *a, **kw: (409, b"file already exists\n"))
     rc = publish_cmd.cmd_publish(_args_for(wheel_file))
     assert rc == 1
     err = capsys.readouterr().err
@@ -221,9 +210,7 @@ def test_cmd_publish_401_exits_1(monkeypatch, wheel_file, loopback_pyproject, ca
 def test_cmd_publish_403_exits_1(monkeypatch, wheel_file, loopback_pyproject, capsys):
     monkeypatch.setenv("AUNTIE_PUBLISH_USER", "bob")
     monkeypatch.setenv("AUNTIE_PUBLISH_PASSWORD", "hunter2")
-    monkeypatch.setattr(
-        publish_cmd, "post", lambda *a, **kw: (403, b"user 'bob' cannot publish\n")
-    )
+    monkeypatch.setattr(publish_cmd, "post", lambda *a, **kw: (403, b"user 'bob' cannot publish\n"))
     rc = publish_cmd.cmd_publish(_args_for(wheel_file))
     assert rc == 1
     err = capsys.readouterr().err
@@ -234,9 +221,7 @@ def test_cmd_publish_403_exits_1(monkeypatch, wheel_file, loopback_pyproject, ca
 def test_cmd_publish_413_exits_1(monkeypatch, wheel_file, loopback_pyproject, capsys):
     monkeypatch.setenv("AUNTIE_PUBLISH_USER", "alice")
     monkeypatch.setenv("AUNTIE_PUBLISH_PASSWORD", "secret")
-    monkeypatch.setattr(
-        publish_cmd, "post", lambda *a, **kw: (413, b"upload too large\n")
-    )
+    monkeypatch.setattr(publish_cmd, "post", lambda *a, **kw: (413, b"upload too large\n"))
     rc = publish_cmd.cmd_publish(_args_for(wheel_file))
     assert rc == 1
     assert "413" in capsys.readouterr().err
@@ -290,9 +275,7 @@ def test_cmd_publish_json_mode(monkeypatch, wheel_file, loopback_pyproject, caps
     assert payload["filename"] == "mypkg-1.0-py3-none-any.whl"
 
 
-def test_cmd_publish_env_creds_bypass_prompts(
-    monkeypatch, wheel_file, loopback_pyproject
-):
+def test_cmd_publish_env_creds_bypass_prompts(monkeypatch, wheel_file, loopback_pyproject):
     """When both env vars are set, neither input() nor getpass() is called."""
     monkeypatch.setenv("AUNTIE_PUBLISH_USER", "alice")
     monkeypatch.setenv("AUNTIE_PUBLISH_PASSWORD", "secret")
@@ -306,21 +289,17 @@ def test_cmd_publish_env_creds_bypass_prompts(
     assert publish_cmd.cmd_publish(_args_for(wheel_file)) == 0
 
 
-def test_cmd_publish_picks_https_when_tls_configured(
-    monkeypatch, wheel_file, tmp_path: Path
-):
+def test_cmd_publish_picks_https_when_tls_configured(monkeypatch, wheel_file, tmp_path: Path):
     """When pyproject configures cert/key, the URL becomes https://."""
     (tmp_path / "c.pem").write_text("cert")
     (tmp_path / "k.pem").write_text("key")
-    (tmp_path / "pyproject.toml").write_text(
-        f"""
+    (tmp_path / "pyproject.toml").write_text(f"""
         [tool.auntiepypi.local]
         host = "127.0.0.1"
         port = 3141
         cert = "{tmp_path / 'c.pem'}"
         key  = "{tmp_path / 'k.pem'}"
-        """
-    )
+        """)
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("AUNTIE_PUBLISH_USER", "alice")
     monkeypatch.setenv("AUNTIE_PUBLISH_PASSWORD", "secret")
@@ -336,21 +315,17 @@ def test_cmd_publish_picks_https_when_tls_configured(
     assert captured["url"].startswith("https://")
 
 
-def test_cmd_publish_warns_on_insecure_skip_verify(
-    monkeypatch, wheel_file, tmp_path: Path, capsys
-):
+def test_cmd_publish_warns_on_insecure_skip_verify(monkeypatch, wheel_file, tmp_path: Path, capsys):
     """Setting AUNTIE_INSECURE_SKIP_VERIFY=1 must emit a stderr warning."""
     (tmp_path / "c.pem").write_text("cert")
     (tmp_path / "k.pem").write_text("key")
-    (tmp_path / "pyproject.toml").write_text(
-        f"""
+    (tmp_path / "pyproject.toml").write_text(f"""
         [tool.auntiepypi.local]
         host = "127.0.0.1"
         port = 3141
         cert = "{tmp_path / 'c.pem'}"
         key  = "{tmp_path / 'k.pem'}"
-        """
-    )
+        """)
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("AUNTIE_PUBLISH_USER", "alice")
     monkeypatch.setenv("AUNTIE_PUBLISH_PASSWORD", "secret")
@@ -373,3 +348,92 @@ def test_publish_verb_registered_in_main_parser():
         args = parser.parse_args(["publish", "/tmp/x.whl"])  # noqa: S108
         assert args.command == "publish"
         assert args.path == Path("/tmp/x.whl")  # noqa: S108
+
+
+# --------- coverage closeouts ---------
+
+
+def test_resolve_creds_non_tty_without_env_exits_2(
+    monkeypatch, wheel_file, loopback_pyproject, capsys
+):
+    """Non-interactive run without env vars must exit 2, not block."""
+    monkeypatch.delenv("AUNTIE_PUBLISH_USER", raising=False)
+    monkeypatch.delenv("AUNTIE_PUBLISH_PASSWORD", raising=False)
+    monkeypatch.setattr("sys.stdin.isatty", lambda: False)
+    with pytest.raises(SystemExit) as exc:
+        publish_cmd.cmd_publish(_args_for(wheel_file))
+    assert exc.value.code == 2
+    assert "missing credentials" in capsys.readouterr().err
+
+
+def test_resolve_creds_interactive_prompt_used(monkeypatch, wheel_file, loopback_pyproject):
+    """When env vars are missing but TTY is attached, prompt for both."""
+    monkeypatch.delenv("AUNTIE_PUBLISH_USER", raising=False)
+    monkeypatch.delenv("AUNTIE_PUBLISH_PASSWORD", raising=False)
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    monkeypatch.setattr("builtins.input", lambda *_: "alice")
+    monkeypatch.setattr("getpass.getpass", lambda *_: "secret")
+    monkeypatch.setattr(publish_cmd, "post", lambda *a, **kw: (201, b'{"ok": true}'))
+    assert publish_cmd.cmd_publish(_args_for(wheel_file)) == 0
+
+
+def test_emit_success_handles_non_json_body(monkeypatch, wheel_file, loopback_pyproject, capsys):
+    """Server might respond 2xx with plain text; CLI must not crash."""
+    monkeypatch.setenv("AUNTIE_PUBLISH_USER", "alice")
+    monkeypatch.setenv("AUNTIE_PUBLISH_PASSWORD", "secret")
+    monkeypatch.setattr(publish_cmd, "post", lambda *a, **kw: (200, b"ok"))
+    rc = publish_cmd.cmd_publish(_args_for(wheel_file))
+    assert rc == 0
+    out = capsys.readouterr().out
+    # No filename in the response → falls back to <unknown>
+    assert "published" in out
+
+
+def test_emit_failure_json_mode(monkeypatch, wheel_file, loopback_pyproject, capsys):
+    """JSON-mode failure prints structured payload, not text."""
+    monkeypatch.setenv("AUNTIE_PUBLISH_USER", "alice")
+    monkeypatch.setenv("AUNTIE_PUBLISH_PASSWORD", "secret")
+    monkeypatch.setattr(publish_cmd, "post", lambda *a, **kw: (409, b"file already exists\n"))
+    rc = publish_cmd.cmd_publish(_args_for(wheel_file, json_mode=True))
+    assert rc == 1
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["ok"] is False
+    assert payload["status"] == 409
+
+
+def test_post_uses_default_verifying_context_for_https(monkeypatch):
+    """verify=True on https URL → ssl.create_default_context() in play."""
+    captured: dict[str, object] = {}
+
+    class _FakeResp:
+        status = 201
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return None
+
+        def read(self):
+            return b'{"ok": true}'
+
+    def fake_urlopen(req, timeout, context):
+        captured["context"] = context
+        return _FakeResp()
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+    post(
+        "https://127.0.0.1:3141/",
+        b"x",
+        "ct",
+        "alice",
+        "secret",
+        verify=True,
+    )
+    import ssl as _ssl
+
+    # The default verifying context has CERT_REQUIRED + check_hostname=True.
+    ctx = captured["context"]
+    assert isinstance(ctx, _ssl.SSLContext)
+    assert ctx.verify_mode == _ssl.CERT_REQUIRED
+    assert ctx.check_hostname is True

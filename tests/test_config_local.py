@@ -556,6 +556,7 @@ def test_load_local_config_loads_publish_users(tmp_path, monkeypatch):
     htp = tmp_path / "htpasswd"
     # Real bcrypt entries — the validator parses the file.
     import bcrypt
+
     h = bcrypt.hashpw(b"pw", bcrypt.gensalt(rounds=4))  # noqa: S106
     htp.write_bytes(b"alice:" + h + b"\nbob:" + h + b"\n")
     _write_pyproject(
@@ -627,6 +628,7 @@ def test_load_local_config_rejects_publish_user_not_in_htpasswd(tmp_path, monkey
     monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
     htp = tmp_path / "htpasswd"
     import bcrypt
+
     h = bcrypt.hashpw(b"pw", bcrypt.gensalt(rounds=4))  # noqa: S106
     # Only alice in htpasswd, but publish_users names eve.
     htp.write_bytes(b"alice:" + h + b"\n")
@@ -649,7 +651,7 @@ def test_load_local_config_publish_users_membership_skipped_when_htpasswd_missin
     the strategy will surface a clearer 'cannot read htpasswd' error at
     server-start time."""
     monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
-    htp = tmp_path / "missing.htpasswd"   # never created
+    htp = tmp_path / "missing.htpasswd"  # never created
     _write_pyproject(
         tmp_path,
         f"""
@@ -704,6 +706,7 @@ def test_load_local_config_publish_users_empty_list_is_read_only(tmp_path, monke
     monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
     htp = tmp_path / "htpasswd"
     import bcrypt
+
     h = bcrypt.hashpw(b"pw", bcrypt.gensalt(rounds=4))  # noqa: S106
     htp.write_bytes(b"alice:" + h + b"\n")
     _write_pyproject(

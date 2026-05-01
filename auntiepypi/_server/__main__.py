@@ -82,8 +82,7 @@ def _parser() -> argparse.ArgumentParser:
         "--max-upload-bytes",
         type=int,
         default=_DEFAULT_MAX_UPLOAD_BYTES,
-        help=f"reject uploads larger than this (bytes; default "
-        f"{_DEFAULT_MAX_UPLOAD_BYTES})",
+        help=f"reject uploads larger than this (bytes; default " f"{_DEFAULT_MAX_UPLOAD_BYTES})",
     )
     return p
 

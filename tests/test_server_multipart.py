@@ -35,9 +35,7 @@ def _twine_body(content: bytes = b"WHEELBYTES", filename: str = "mypkg-1.0.whl")
             ({"Content-Disposition": 'form-data; name="name"'}, b"mypkg"),
             (
                 {
-                    "Content-Disposition": (
-                        f'form-data; name="content"; filename="{filename}"'
-                    ),
+                    "Content-Disposition": (f'form-data; name="content"; filename="{filename}"'),
                     "Content-Type": "application/octet-stream",
                 },
                 content,
@@ -85,9 +83,7 @@ def test_parse_ignores_extra_pypi_metadata_fields():
             ({"Content-Disposition": 'form-data; name="sha256_digest"'}, b"deadbeef"),
             (
                 {
-                    "Content-Disposition": (
-                        'form-data; name="content"; filename="mypkg-1.0.whl"'
-                    ),
+                    "Content-Disposition": ('form-data; name="content"; filename="mypkg-1.0.whl"'),
                 },
                 b"WHEELBYTES",
             ),
@@ -108,9 +104,7 @@ def test_parse_ignores_gpg_signature_part():
             ({"Content-Disposition": 'form-data; name="name"'}, b"mypkg"),
             (
                 {
-                    "Content-Disposition": (
-                        'form-data; name="content"; filename="mypkg-1.0.whl"'
-                    ),
+                    "Content-Disposition": ('form-data; name="content"; filename="mypkg-1.0.whl"'),
                 },
                 b"WHEELBYTES",
             ),
@@ -130,20 +124,24 @@ def test_parse_ignores_gpg_signature_part():
 
 def test_parse_handles_alternative_boundary_string():
     boundary = "Hi-there-this-is-a-different-boundary"
-    body = _twine_body() if False else _make_body(
-        [
-            ({"Content-Disposition": 'form-data; name=":action"'}, b"file_upload"),
-            ({"Content-Disposition": 'form-data; name="name"'}, b"mypkg"),
-            (
-                {
-                    "Content-Disposition": (
-                        'form-data; name="content"; filename="mypkg-1.0.whl"'
-                    ),
-                },
-                b"WHEELBYTES",
-            ),
-        ],
-        boundary=boundary,
+    body = (
+        _twine_body()
+        if False
+        else _make_body(
+            [
+                ({"Content-Disposition": 'form-data; name=":action"'}, b"file_upload"),
+                ({"Content-Disposition": 'form-data; name="name"'}, b"mypkg"),
+                (
+                    {
+                        "Content-Disposition": (
+                            'form-data; name="content"; filename="mypkg-1.0.whl"'
+                        ),
+                    },
+                    b"WHEELBYTES",
+                ),
+            ],
+            boundary=boundary,
+        )
     )
     fields = parse_multipart_upload(_ctype(boundary), body, _DEFAULT_MAX)
     assert fields.name == "mypkg"

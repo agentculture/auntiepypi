@@ -43,9 +43,12 @@ def _new_boundary() -> str:
 
 def _text_part(boundary: str, name: str, value: bytes) -> bytes:
     return (
-        f"--{boundary}\r\n"
-        f'Content-Disposition: form-data; name="{name}"\r\n\r\n'
-    ).encode("utf-8") + value + b"\r\n"
+        (f"--{boundary}\r\n" f'Content-Disposition: form-data; name="{name}"\r\n\r\n').encode(
+            "utf-8"
+        )
+        + value
+        + b"\r\n"
+    )
 
 
 def _file_part(boundary: str, name: str, filename: str, value: bytes) -> bytes:
@@ -90,6 +93,20 @@ def insecure_skip_verify_enabled() -> bool:
     return os.environ.get("AUNTIE_INSECURE_SKIP_VERIFY", "") not in ("", "0", "false", "False")
 
 
+def _build_client_ssl_context(url: str, *, verify: bool) -> ssl.SSLContext | None:
+    """Pick an SSL context for the upload POST.
+
+    HTTPS + verify=True → CA-verifying default context.
+    HTTPS + verify=False → unverified context (operator opt-in via
+    AUNTIE_INSECURE_SKIP_VERIFY=1 only). HTTP → None.
+    """
+    if not url.startswith("https://"):
+        return None
+    if verify:
+        return ssl.create_default_context()
+    return ssl._create_unverified_context()  # noqa: S323  # nosec B323  # NOSONAR python:S4830
+
+
 def post(
     url: str,
     body: bytes,
@@ -123,16 +140,11 @@ def post(
             "Content-Length": str(len(body)),
         },
     )
-    ctx: ssl.SSLContext | None = None
-    if url.startswith("https://"):
-        if verify:
-            ctx = ssl.create_default_context()
-        else:
-            # Opt-in via AUNTIE_INSECURE_SKIP_VERIFY for self-signed
-            # operators; never silent.
-            ctx = ssl._create_unverified_context()  # noqa: S323  # nosec B323  # NOSONAR python:S4830
+    ctx = _build_client_ssl_context(url, verify=verify)
     try:
-        with urllib.request.urlopen(req, timeout=timeout, context=ctx) as resp:  # noqa: S310
+        with urllib.request.urlopen(  # noqa: S310  # nosec B310 - http/https only
+            req, timeout=timeout, context=ctx
+        ) as resp:
             return resp.status, resp.read()
     except urllib.error.HTTPError as err:
         # 4xx/5xx responses come through HTTPError — read the body
