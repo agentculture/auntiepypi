@@ -321,6 +321,91 @@ def _validate_local_tls_pair(cert: Path | None, key: Path | None) -> None:
     )
 
 
+def _validate_local_publish_users(value: object) -> tuple[str, ...]:
+    """Type-validate the v0.8.0 ``publish_users`` allowlist.
+
+    Returns a tuple of names. Empty list is allowed (= read-only mode).
+    """
+    if not isinstance(value, list):
+        raise ServerConfigError(
+            "[tool.auntiepypi.local] 'publish_users' must be a list of strings"
+        )
+    out: list[str] = []
+    for i, item in enumerate(value):
+        if not isinstance(item, str) or not item:
+            raise ServerConfigError(
+                f"[tool.auntiepypi.local] publish_users[{i}] must be a non-empty string"
+            )
+        out.append(item)
+    return tuple(out)
+
+
+def _validate_local_max_upload_bytes(value: object) -> int:
+    """Type-validate the v0.8.0 ``max_upload_bytes`` cap.
+
+    Reject sub-1024 values: that's well below any real wheel and
+    suggests a config bug (e.g. someone wrote ``104857600`` as
+    ``104.857600``).
+    """
+    # bool is a subclass of int — reject it explicitly (would otherwise
+    # let `max_upload_bytes = true` pass as 1).
+    if not isinstance(value, int) or isinstance(value, bool):
+        raise ServerConfigError(
+            "[tool.auntiepypi.local] 'max_upload_bytes' must be an integer"
+        )
+    if value < 1024:
+        raise ServerConfigError(
+            f"[tool.auntiepypi.local] 'max_upload_bytes' must be >= 1024 (got {value})"
+        )
+    return value
+
+
+def _validate_publish_authz_dependency(
+    htpasswd: Path | None, publish_users: tuple[str, ...]
+) -> None:
+    """publish_users without htpasswd is a misconfiguration.
+
+    You can't authorize a user the server can't authenticate. The
+    error names both fields so the operator knows where to look.
+    """
+    if publish_users and htpasswd is None:
+        raise ServerConfigError(
+            "[tool.auntiepypi.local] 'publish_users' requires 'htpasswd'; "
+            "publish authorization without authentication is not allowed."
+        )
+
+
+def _validate_publish_users_in_htpasswd(
+    htpasswd: Path | None, publish_users: tuple[str, ...]
+) -> None:
+    """Cross-check: every publish_users entry must exist in htpasswd.
+
+    Runs at config-load when both are present; the goal is to catch
+    typos and stale rotations before the server starts. We tolerate a
+    missing/unreadable htpasswd file at config-load time (the strategy
+    will surface a clearer error at start-time) — only run the
+    membership check when the file actually parses.
+    """
+    if not publish_users or htpasswd is None:
+        return
+    # Delayed import: parse_htpasswd lives in _server, _detect mustn't
+    # take a hard dep on it for the lenient detection paths.
+    from auntiepypi._server._auth import HtpasswdError, parse_htpasswd
+
+    try:
+        table = parse_htpasswd(htpasswd)
+    except (FileNotFoundError, OSError, HtpasswdError):
+        # Fall through — the strategy will report it at start-time.
+        return
+    missing = [name for name in publish_users if name not in table]
+    if missing:
+        raise ServerConfigError(
+            f"[tool.auntiepypi.local] publish_users contains name(s) not in "
+            f"{htpasswd}: {missing}. Either remove from publish_users or re-add "
+            "to htpasswd."
+        )
+
+
 def _validate_local_lift_rule(
     host: str,
     cert: Path | None,
@@ -399,6 +484,12 @@ def load_local_config(start: Path | None = None) -> LocalConfig:
         kwargs["key"] = _validate_local_path_field(local_table["key"], "key")
     if "htpasswd" in local_table:
         kwargs["htpasswd"] = _validate_local_path_field(local_table["htpasswd"], "htpasswd")
+    if "publish_users" in local_table:
+        kwargs["publish_users"] = _validate_local_publish_users(local_table["publish_users"])
+    if "max_upload_bytes" in local_table:
+        kwargs["max_upload_bytes"] = _validate_local_max_upload_bytes(
+            local_table["max_upload_bytes"]
+        )
 
     # Cross-field validation. TLS pairing is host-independent — a
     # loopback config with only `cert` (no `key`) would otherwise be
@@ -410,6 +501,14 @@ def load_local_config(start: Path | None = None) -> LocalConfig:
         cert=kwargs.get("cert"),
         key=kwargs.get("key"),
         htpasswd=kwargs.get("htpasswd"),
+    )
+    _validate_publish_authz_dependency(
+        htpasswd=kwargs.get("htpasswd"),
+        publish_users=kwargs.get("publish_users", ()),
+    )
+    _validate_publish_users_in_htpasswd(
+        htpasswd=kwargs.get("htpasswd"),
+        publish_users=kwargs.get("publish_users", ()),
     )
     return LocalConfig(**kwargs)
 

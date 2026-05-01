@@ -545,3 +545,175 @@ def test_localconfig_publish_users_is_tuple_for_freezable():
 def test_localconfig_max_upload_bytes_overridable():
     cfg = LocalConfig(max_upload_bytes=2 * 1024 * 1024 * 1024)
     assert cfg.max_upload_bytes == 2 * 1024 * 1024 * 1024
+
+
+# --------- v0.8.0 publish_users / max_upload_bytes validators ---------
+
+
+def test_load_local_config_loads_publish_users(tmp_path, monkeypatch):
+    """Reading publish_users requires htpasswd; supply one."""
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
+    htp = tmp_path / "htpasswd"
+    # Real bcrypt entries — the validator parses the file.
+    import bcrypt
+    h = bcrypt.hashpw(b"pw", bcrypt.gensalt(rounds=4))  # noqa: S106
+    htp.write_bytes(b"alice:" + h + b"\nbob:" + h + b"\n")
+    _write_pyproject(
+        tmp_path,
+        f"""
+        [tool.auntiepypi.local]
+        htpasswd = "{htp}"
+        publish_users = ["alice", "bob"]
+        max_upload_bytes = 209715200
+        """,
+    )
+    cfg = load_local_config(tmp_path)
+    assert cfg.publish_users == ("alice", "bob")
+    assert cfg.max_upload_bytes == 209715200
+    assert cfg.publish_enabled is True
+
+
+def test_load_local_config_rejects_publish_users_not_a_list(tmp_path):
+    _write_pyproject(
+        tmp_path,
+        """
+        [tool.auntiepypi.local]
+        publish_users = "alice"
+        """,
+    )
+    with pytest.raises(ServerConfigError, match=r"publish_users.*list of strings"):
+        load_local_config(tmp_path)
+
+
+def test_load_local_config_rejects_publish_users_with_empty_string(tmp_path):
+    _write_pyproject(
+        tmp_path,
+        """
+        [tool.auntiepypi.local]
+        publish_users = ["alice", ""]
+        """,
+    )
+    with pytest.raises(ServerConfigError, match=r"publish_users\[1\].*non-empty"):
+        load_local_config(tmp_path)
+
+
+def test_load_local_config_rejects_publish_users_with_non_string(tmp_path):
+    _write_pyproject(
+        tmp_path,
+        """
+        [tool.auntiepypi.local]
+        publish_users = ["alice", 42]
+        """,
+    )
+    with pytest.raises(ServerConfigError, match=r"publish_users\[1\].*non-empty"):
+        load_local_config(tmp_path)
+
+
+def test_load_local_config_rejects_publish_users_without_htpasswd(tmp_path):
+    """Authorization without authentication is a hard error."""
+    _write_pyproject(
+        tmp_path,
+        """
+        [tool.auntiepypi.local]
+        publish_users = ["alice"]
+        """,
+    )
+    with pytest.raises(ServerConfigError, match=r"publish_users.*requires.*htpasswd"):
+        load_local_config(tmp_path)
+
+
+def test_load_local_config_rejects_publish_user_not_in_htpasswd(tmp_path, monkeypatch):
+    """Cross-validator catches a publish_users name that isn't an htpasswd entry."""
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
+    htp = tmp_path / "htpasswd"
+    import bcrypt
+    h = bcrypt.hashpw(b"pw", bcrypt.gensalt(rounds=4))  # noqa: S106
+    # Only alice in htpasswd, but publish_users names eve.
+    htp.write_bytes(b"alice:" + h + b"\n")
+    _write_pyproject(
+        tmp_path,
+        f"""
+        [tool.auntiepypi.local]
+        htpasswd = "{htp}"
+        publish_users = ["alice", "eve"]
+        """,
+    )
+    with pytest.raises(ServerConfigError, match=r"publish_users contains name.*'eve'"):
+        load_local_config(tmp_path)
+
+
+def test_load_local_config_publish_users_membership_skipped_when_htpasswd_missing(
+    tmp_path, monkeypatch
+):
+    """If htpasswd file doesn't exist, the membership check skips silently —
+    the strategy will surface a clearer 'cannot read htpasswd' error at
+    server-start time."""
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
+    htp = tmp_path / "missing.htpasswd"   # never created
+    _write_pyproject(
+        tmp_path,
+        f"""
+        [tool.auntiepypi.local]
+        htpasswd = "{htp}"
+        publish_users = ["alice"]
+        """,
+    )
+    cfg = load_local_config(tmp_path)
+    assert cfg.publish_users == ("alice",)
+
+
+def test_load_local_config_rejects_max_upload_bytes_not_int(tmp_path):
+    _write_pyproject(
+        tmp_path,
+        """
+        [tool.auntiepypi.local]
+        max_upload_bytes = "104857600"
+        """,
+    )
+    with pytest.raises(ServerConfigError, match=r"max_upload_bytes.*integer"):
+        load_local_config(tmp_path)
+
+
+def test_load_local_config_rejects_max_upload_bytes_too_small(tmp_path):
+    _write_pyproject(
+        tmp_path,
+        """
+        [tool.auntiepypi.local]
+        max_upload_bytes = 100
+        """,
+    )
+    with pytest.raises(ServerConfigError, match=r"max_upload_bytes.*>= 1024"):
+        load_local_config(tmp_path)
+
+
+def test_load_local_config_rejects_max_upload_bytes_bool(tmp_path):
+    """`true` must not pass the int check (Python bool is an int subclass)."""
+    _write_pyproject(
+        tmp_path,
+        """
+        [tool.auntiepypi.local]
+        max_upload_bytes = true
+        """,
+    )
+    with pytest.raises(ServerConfigError, match=r"max_upload_bytes.*integer"):
+        load_local_config(tmp_path)
+
+
+def test_load_local_config_publish_users_empty_list_is_read_only(tmp_path, monkeypatch):
+    """An explicit empty publish_users list is the same as unset: read-only."""
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
+    htp = tmp_path / "htpasswd"
+    import bcrypt
+    h = bcrypt.hashpw(b"pw", bcrypt.gensalt(rounds=4))  # noqa: S106
+    htp.write_bytes(b"alice:" + h + b"\n")
+    _write_pyproject(
+        tmp_path,
+        f"""
+        [tool.auntiepypi.local]
+        htpasswd = "{htp}"
+        publish_users = []
+        """,
+    )
+    cfg = load_local_config(tmp_path)
+    assert cfg.publish_users == ()
+    assert cfg.publish_enabled is False
