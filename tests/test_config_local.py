@@ -222,3 +222,43 @@ def test_load_local_config_localhost_accepted(tmp_path, monkeypatch):
     )
     cfg = load_local_config(tmp_path)
     assert cfg.host == "localhost"
+
+
+# --------- LocalConfig.tls_enabled / .auth_enabled (v0.7.0) ---------
+
+
+def test_localconfig_tls_auth_default_off():
+    """v0.6.0 pyprojects (no cert/key/htpasswd) get tls_enabled = auth_enabled = False."""
+    cfg = LocalConfig()
+    assert cfg.cert is None
+    assert cfg.key is None
+    assert cfg.htpasswd is None
+    assert cfg.tls_enabled is False
+    assert cfg.auth_enabled is False
+
+
+def test_localconfig_tls_enabled_requires_both_cert_and_key(tmp_path):
+    """tls_enabled is True only when both cert AND key are set."""
+    cert = tmp_path / "c.pem"
+    key = tmp_path / "k.pem"
+    assert LocalConfig(cert=cert).tls_enabled is False
+    assert LocalConfig(key=key).tls_enabled is False
+    assert LocalConfig(cert=cert, key=key).tls_enabled is True
+
+
+def test_localconfig_auth_enabled_when_htpasswd_set(tmp_path):
+    htp = tmp_path / "htpasswd"
+    assert LocalConfig().auth_enabled is False
+    assert LocalConfig(htpasswd=htp).auth_enabled is True
+
+
+def test_localconfig_full_bundle(tmp_path):
+    cert = tmp_path / "c.pem"
+    key = tmp_path / "k.pem"
+    htp = tmp_path / "htpasswd"
+    cfg = LocalConfig(cert=cert, key=key, htpasswd=htp)
+    assert cfg.tls_enabled is True
+    assert cfg.auth_enabled is True
+    assert cfg.cert == cert
+    assert cfg.key == key
+    assert cfg.htpasswd == htp
