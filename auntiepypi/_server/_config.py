@@ -1,7 +1,8 @@
 """Configuration for the first-party PEP 503 simple-index server.
 
-``LocalConfig`` is a frozen dataclass with three core fields and three
-optional v0.7.0 fields, all defaulted:
+``LocalConfig`` is a frozen dataclass with three core fields plus
+optional v0.7.0 (TLS + auth) and v0.8.0 (publish authz) fields, all
+defaulted:
 
 - ``host``: bind address. Loopback is always allowed; non-loopback
   binds require both TLS (``cert`` + ``key``) AND auth (``htpasswd``).
@@ -17,6 +18,12 @@ optional v0.7.0 fields, all defaulted:
   Operator-supplied; auntie does not auto-generate.
 - ``htpasswd`` (v0.7.0): Apache htpasswd file (bcrypt-only entries) for
   HTTP Basic auth.
+- ``publish_users`` (v0.8.0): allowlist of htpasswd usernames permitted
+  to POST uploads. Empty / unset → no one can publish (read-only mode
+  preserved). Set with names → only those users can POST. Requires
+  ``htpasswd`` (you can't authorize anonymous users).
+- ``max_upload_bytes`` (v0.8.0): per-request upload size cap.
+  Default 100 MiB. Operators with multi-GiB ML wheels override.
 
 The loader (``auntiepypi._detect._config.load_local_config``) reads
 ``[tool.auntiepypi.local]`` from ``pyproject.toml`` if present and
@@ -32,6 +39,7 @@ from pathlib import Path
 
 _DEFAULT_PORT = 3141
 _DEFAULT_HOST = "127.0.0.1"
+_DEFAULT_MAX_UPLOAD_BYTES = 100 * 1024 * 1024  # 100 MiB
 
 
 def default_root() -> Path:
@@ -50,6 +58,8 @@ class LocalConfig:
     cert: Path | None = None
     key: Path | None = None
     htpasswd: Path | None = None
+    publish_users: tuple[str, ...] = ()
+    max_upload_bytes: int = _DEFAULT_MAX_UPLOAD_BYTES
 
     @property
     def tls_enabled(self) -> bool:
@@ -64,3 +74,13 @@ class LocalConfig:
     def auth_enabled(self) -> bool:
         """True iff ``htpasswd`` is set."""
         return self.htpasswd is not None
+
+    @property
+    def publish_enabled(self) -> bool:
+        """True iff ``publish_users`` is non-empty AND auth is on.
+
+        Empty allowlist means read-only mode (no one publishes, even
+        with valid credentials). The config-load validator rejects a
+        non-empty allowlist without auth before this property runs.
+        """
+        return bool(self.publish_users) and self.auth_enabled

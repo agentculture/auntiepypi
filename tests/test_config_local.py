@@ -510,3 +510,38 @@ def test_load_local_config_localhost_with_cert_only_rejected(tmp_path):
     )
     with pytest.raises(ServerConfigError, match=r"TLS pair incomplete"):
         load_local_config(tmp_path)
+
+
+# --------- v0.8.0: publish_users + max_upload_bytes ---------
+
+
+def test_localconfig_publish_defaults_off():
+    """Defaults: empty publish_users, 100 MiB cap, publish_enabled False."""
+    cfg = LocalConfig()
+    assert cfg.publish_users == ()
+    assert cfg.max_upload_bytes == 100 * 1024 * 1024
+    assert cfg.publish_enabled is False
+
+
+def test_localconfig_publish_enabled_requires_both_allowlist_and_auth(tmp_path):
+    """publish_enabled is True only when publish_users non-empty AND auth_enabled."""
+    htp = tmp_path / "htpasswd"
+    # allowlist alone, no auth — False
+    assert LocalConfig(publish_users=("alice",)).publish_enabled is False
+    # auth alone, no allowlist — False
+    assert LocalConfig(htpasswd=htp).publish_enabled is False
+    # both — True
+    cfg = LocalConfig(htpasswd=htp, publish_users=("alice",))
+    assert cfg.publish_enabled is True
+
+
+def test_localconfig_publish_users_is_tuple_for_freezable():
+    """publish_users stored as tuple so the frozen dataclass stays hashable."""
+    cfg = LocalConfig(publish_users=("alice", "bob"))
+    assert isinstance(cfg.publish_users, tuple)
+    assert cfg.publish_users == ("alice", "bob")
+
+
+def test_localconfig_max_upload_bytes_overridable():
+    cfg = LocalConfig(max_upload_bytes=2 * 1024 * 1024 * 1024)
+    assert cfg.max_upload_bytes == 2 * 1024 * 1024 * 1024
