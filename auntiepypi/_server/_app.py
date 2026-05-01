@@ -1,6 +1,6 @@
-"""HTTP handler factory for the v0.6.0 read-only PEP 503 simple-index.
+"""HTTP handler factory for the read-only PEP 503 simple-index.
 
-Three routes:
+Three routes (since v0.6.0):
 
 - ``GET /simple/`` — HTML anchor list of projects in the wheelhouse.
 - ``GET /simple/<pkg>/`` (or without trailing slash) — HTML anchor list
@@ -12,6 +12,13 @@ Three routes:
   the root.
 
 Any other path or non-GET method → 404 / 405.
+
+v0.7.0 adds an optional auth gate: when ``make_handler(root,
+htpasswd_map=...)`` is called with a non-None map, every request must
+present a valid ``Authorization: Basic`` header (verified against
+:mod:`._auth`). Missing or invalid → 401 with ``WWW-Authenticate``.
+When the map is None, the handler is unauthenticated (v0.6.0
+behavior preserved).
 
 The handler is a *factory* (``make_handler(root)``) returning a
 ``BaseHTTPRequestHandler`` subclass that closes over ``root``. This
@@ -27,6 +34,7 @@ from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
+from auntiepypi._server._auth import verify_basic
 from auntiepypi._server._wheelhouse import list_projects, normalize
 
 _SIMPLE_PREFIX = "/simple/"
@@ -37,8 +45,17 @@ _FILES_PREFIX = "/files/"
 _SAFE_FILENAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+-]*\.(whl|tar\.gz|zip)$")
 
 
-def make_handler(root: Path) -> type[BaseHTTPRequestHandler]:
-    """Return a request-handler class bound to ``root``."""
+def make_handler(
+    root: Path,
+    *,
+    htpasswd_map: dict[str, bytes] | None = None,
+) -> type[BaseHTTPRequestHandler]:
+    """Return a request-handler class bound to ``root``.
+
+    When ``htpasswd_map`` is non-None, every request is gated through
+    HTTP Basic auth against the map; missing/invalid creds → 401.
+    When None, the handler is unauthenticated (v0.6.0 behavior).
+    """
     resolved_root = root.resolve()
 
     class _Handler(BaseHTTPRequestHandler):
@@ -47,6 +64,8 @@ def make_handler(root: Path) -> type[BaseHTTPRequestHandler]:
             return
 
         def do_GET(self) -> None:  # noqa: N802 — stdlib name
+            if htpasswd_map is not None and not self._authenticate():
+                return self._send_401()
             parsed = urlparse(self.path)
             path = unquote(parsed.path)
 
@@ -148,6 +167,38 @@ def make_handler(root: Path) -> type[BaseHTTPRequestHandler]:
         def _send_status(self, status: int) -> None:
             body = f"{status}\n".encode()
             self.send_response(status)
+            self.send_header("Content-Type", "text/plain; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        # --- auth (v0.7.0) -------------------------------------------------
+
+        def _authenticate(self) -> bool:
+            """Check the ``Authorization`` header against ``htpasswd_map``.
+
+            Caller (``do_GET``) only invokes this when ``htpasswd_map``
+            is non-None; the assertion below is a tripwire if that
+            invariant is ever violated by a future refactor.
+            """
+            assert htpasswd_map is not None  # noqa: S101 - invariant tripwire
+            return verify_basic(
+                self.headers.get("Authorization", ""), htpasswd_map
+            )
+
+        def _send_401(self) -> None:
+            """401 + WWW-Authenticate per RFC 7617.
+
+            ``Connection: close`` prevents header confusion across a
+            stale keep-alive on stdlib HTTP/1.0 — defensive.
+            """
+            body = b"401 Unauthorized\n"
+            self.send_response(401)
+            self.send_header(
+                "WWW-Authenticate",
+                'Basic realm="auntiepypi", charset="UTF-8"',
+            )
+            self.send_header("Connection", "close")
             self.send_header("Content-Type", "text/plain; charset=utf-8")
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
