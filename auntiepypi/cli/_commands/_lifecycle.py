@@ -1,9 +1,15 @@
-"""Shared core for the v0.5.0 lifecycle verbs (`up`, `down`, `restart`).
+"""Shared core for the lifecycle verbs (`up`, `down`, `restart`).
 
 All three verbs share resolution logic, supervision filtering, exit-code
 derivation, and output shape. Each verb-specific module is a thin
 wrapper that supplies its action ("start", "stop", "restart") and a few
 strings for help text.
+
+v0.6.0: bare invocation (no target, no `--all`) acts on the
+first-party server (`[tool.auntiepypi.local]`). `--all` aggregates the
+local server with every supervised `[[tool.auntiepypi.servers]]`
+declaration. The name "auntie" is reserved — declared specs that use
+it are rejected at lifecycle resolution time.
 """
 
 from __future__ import annotations
@@ -15,14 +21,16 @@ from typing import Literal
 from auntiepypi import _actions
 from auntiepypi._actions._action import ActionResult
 from auntiepypi._detect import detect_all
-from auntiepypi._detect._config import ServerSpec, load_servers_lenient
+from auntiepypi._detect._config import ServerSpec, load_local_config, load_servers_lenient
 from auntiepypi._detect._detection import Detection
+from auntiepypi._detect._http import format_http_url
 from auntiepypi.cli._commands._decide import Decisions, parse_decisions
 from auntiepypi.cli._errors import EXIT_ENV_ERROR, EXIT_SUCCESS, EXIT_USER_ERROR, AfiError
 from auntiepypi.cli._output import emit_result
 
 Action = Literal["start", "stop", "restart"]
-SUPERVISED_MODES: frozenset[str] = frozenset({"systemd-user", "command"})
+SUPERVISED_MODES: frozenset[str] = frozenset({"systemd-user", "command", "auntie"})
+RESERVED_NAME = "auntie"
 
 
 @dataclass(frozen=True)
@@ -34,14 +42,34 @@ class _Pair:
     spec: ServerSpec
 
 
-def _bare_invocation_message(verb: str) -> str:
-    """The forward-pointing error for `auntie up` / `auntie down` /
-    `auntie restart` invoked with no target and no --all.
+def _local_pair() -> _Pair:
+    """Synthesize a (Detection, ServerSpec) pair for the first-party server.
+
+    Reads ``[tool.auntiepypi.local]`` fresh on every call so the CLI
+    picks up edits between commands.
     """
-    return (
-        f"auntie {verb}: the first-party auntie server lands in v0.6.0; for now "
-        f"use `auntie {verb} <name>` or `auntie {verb} --all`"
+    cfg = load_local_config()
+    # HTTP is by design here; HTTPS is deferred to v0.7.0. See
+    # docs/superpowers/specs/2026-05-01-auntiepypi-v0.6.0-local-server-design.md.
+    url = format_http_url(cfg.host, cfg.port)
+    detection = Detection(
+        name=RESERVED_NAME,
+        flavor="auntiepypi",
+        host=cfg.host,
+        port=cfg.port,
+        url=url,
+        status="absent",
+        source="local",
+        managed_by="auntie",
     )
+    spec = ServerSpec(
+        name=RESERVED_NAME,
+        flavor="auntiepypi",
+        host=cfg.host,
+        port=cfg.port,
+        managed_by="auntie",
+    )
+    return _Pair(name=RESERVED_NAME, detection=detection, spec=spec)
 
 
 def _detection_for_spec(detections: list[Detection], spec: ServerSpec) -> Detection:
@@ -55,9 +83,9 @@ def _detection_for_spec(detections: list[Detection], spec: ServerSpec) -> Detect
     # robust.
     host = spec.host or "127.0.0.1"
     # HTTP is by design here (matches _detect/_proc.py:169 and the rest
-    # of the detection layer). HTTPS is deferred to v0.6.0+; see
+    # of the detection layer). HTTPS is deferred to v0.7.0; see
     # docs/superpowers/specs/2026-04-30-auntiepypi-v0.5.0-...md.
-    url = f"http://{host}:{spec.port}/"  # NOSONAR python:S5332
+    url = format_http_url(host, spec.port)
     return Detection(
         name=spec.name,
         flavor=spec.flavor or "unknown",
@@ -71,6 +99,16 @@ def _detection_for_spec(detections: list[Detection], spec: ServerSpec) -> Detect
 
 def _resolve_one_spec(target: str, specs: list[ServerSpec], decisions: Decisions) -> ServerSpec:
     """Resolve one ``<name>`` argument against `specs`, with duplicate handling."""
+    if target == RESERVED_NAME:
+        raise AfiError(
+            code=EXIT_USER_ERROR,
+            message=(f"name {RESERVED_NAME!r} is reserved for the first-party server"),
+            remediation=(
+                "use bare `auntie up`/`down`/`restart` (no target) to act on the "
+                "first-party server, or rename the conflicting "
+                "[[tool.auntiepypi.servers]] entry"
+            ),
+        )
     matching = [s for s in specs if s.name == target]
     if not matching:
         raise AfiError(
@@ -113,7 +151,12 @@ def _supervised_specs(
     *,
     skipped_out: list[ServerSpec] | None = None,
 ) -> list[ServerSpec]:
-    """Filter to supervised modes; record skipped specs in `skipped_out` if given."""
+    """Filter to supervised modes; record skipped specs in `skipped_out` if given.
+
+    "auntie" managed_by is supervised but never appears in declared
+    specs (it's a reserved name) — keeping it in SUPERVISED_MODES is
+    cheap insurance against future spec authors leaning on it.
+    """
     out: list[ServerSpec] = []
     for s in specs:
         if (s.managed_by or "manual") in SUPERVISED_MODES:
@@ -170,17 +213,6 @@ def _render_text(verb: str, results: list[tuple[str, ActionResult]]) -> str:
     return f"auntie {verb}:\n" + "\n".join(lines)
 
 
-def _bare_invocation_error(verb: str) -> AfiError:
-    return AfiError(
-        code=EXIT_USER_ERROR,
-        message=_bare_invocation_message(verb),
-        remediation=(
-            f"give a server name (`auntie {verb} <name>`) or use "
-            f"`auntie {verb} --all` to act on every supervised declaration"
-        ),
-    )
-
-
 def _collect_pairs(
     target: str | None,
     all_servers: bool,
@@ -189,12 +221,20 @@ def _collect_pairs(
     decisions: Decisions,
     skipped: list[ServerSpec],
 ) -> list[_Pair]:
-    """Build the (name, detection, spec) list for the lifecycle dispatch loop."""
+    """Build the (name, detection, spec) list for the lifecycle dispatch loop.
+
+    - target=None, all_servers=False → bare form: local server only.
+    - all_servers=True → local server first, then declared supervised pairs.
+    - target!=None → one declared pair (or error if reserved/missing).
+    """
+    if target is None and not all_servers:
+        return [_local_pair()]
     if all_servers:
-        return [
+        declared = [
             _Pair(name=s.name, detection=_detection_for_spec(detections, s), spec=s)
             for s in _supervised_specs(cfg.specs, skipped_out=skipped)
         ]
+        return [_local_pair(), *declared]
     spec = _resolve_one_spec(target or "", cfg.specs, decisions)
     if (spec.managed_by or "manual") not in SUPERVISED_MODES:
         _refuse_unsupervised(spec)
@@ -214,9 +254,6 @@ def run_lifecycle(args: argparse.Namespace, *, verb: str, action: Action) -> int
     all_servers = bool(getattr(args, "all_servers", False))
     json_mode = bool(getattr(args, "json", False))
     decisions = parse_decisions(getattr(args, "decide", None) or [])
-
-    if target is None and not all_servers:
-        raise _bare_invocation_error(verb)
 
     cfg, _gaps = load_servers_lenient()
     detections = detect_all(cfg)
@@ -251,13 +288,19 @@ def add_lifecycle_parser(
         "target",
         nargs="?",
         default=None,
-        help="server name; omit and pass --all to act on every supervised declaration",
+        help=(
+            "server name; omit (and skip --all) to act on the first-party "
+            "server, or pass --all to act on every supervised declaration"
+        ),
     )
     p.add_argument(
         "--all",
         action="store_true",
         dest="all_servers",
-        help="act on every supervised declaration (managed_by=systemd-user|command)",
+        help=(
+            "act on the first-party server plus every supervised "
+            "declaration (managed_by=systemd-user|command)"
+        ),
     )
     p.add_argument(
         "--decide",

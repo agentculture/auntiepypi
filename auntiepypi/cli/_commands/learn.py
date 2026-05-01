@@ -41,15 +41,17 @@ Commands
     [--decide KEY=VALUE]       supervised entries. --decide resolves
                                ambiguous cases (duplicate names). Default
                                is dry-run. Supports --json.
-  auntie up <name>|--all       Start a declared server (or every supervised
-                               one). Bare `auntie up` is reserved for
-                               v0.6.0's first-party server. Supports --json.
-  auntie down <name>|--all     Stop a declared server (or every supervised
-                               one). Same bare-form reservation as `up`.
+  auntie up [name|--all]       Start a server. Bare form starts auntie's
+                               own first-party PEP 503 simple-index
+                               ([tool.auntiepypi.local]); a name targets
+                               one declared server; --all aggregates the
+                               first-party server plus every supervised
+                               declaration. Supports --json.
+  auntie down [name|--all]     Stop a server. Same target shape as `up`.
                                Supports --json.
-  auntie restart <name>|--all  Restart a declared server (atomic for
-                               systemd-user; stop+start for command).
-                               Same bare-form reservation. Supports --json.
+  auntie restart [name|--all]  Restart a server (atomic for systemd-user;
+                               stop+start for command and the first-party
+                               server). Supports --json.
   auntie whoami                Auth/env probe — which PyPI / TestPyPI /
                                local index is the active environment
                                pointing at? Supports --json.
@@ -60,8 +62,13 @@ Configuration
     packages = [...]                      # for overview package sections
     scan_processes = false                # opt into /proc scan; same as --proc
 
-  pyproject.toml [[tool.auntiepypi.servers]]   # one block per server
-    name = "main"
+  pyproject.toml [tool.auntiepypi.local]  # first-party PEP 503 server (v0.6.0)
+    host = "127.0.0.1"                    # loopback only in v0.6.0
+    port = 3141                           # default
+    root = "~/.local/share/auntiepypi/wheels"  # wheelhouse directory
+
+  pyproject.toml [[tool.auntiepypi.servers]]   # one block per declared server
+    name = "main"                         # "auntie" is reserved
     flavor = "pypiserver"                 # | "devpi" | "unknown"
     port = 8080
     managed_by = "systemd-user"          # | "command" | "manual" | (unset)
@@ -122,23 +129,25 @@ def _as_json_payload() -> dict[str, object]:
             {
                 "path": ["up"],
                 "summary": (
-                    "Start a declared server (one by name; --all for every "
-                    "supervised). Bare `auntie up` reserved for v0.6.0's "
-                    "first-party server."
+                    "Start a server. Bare form starts auntie's own first-party "
+                    "PEP 503 simple-index; <name> targets one declared server; "
+                    "--all aggregates the first-party server with every supervised "
+                    "declaration."
                 ),
             },
             {
                 "path": ["down"],
                 "summary": (
-                    "Stop a declared server (one by name; --all for every "
-                    "supervised). PID-tracked for managed_by=command."
+                    "Stop a server. Same target shape as up; PID-tracked for "
+                    "managed_by=command and managed_by=auntie."
                 ),
             },
             {
                 "path": ["restart"],
                 "summary": (
-                    "Restart a declared server. Atomic for systemd-user; "
-                    "stop+start for command (re-spawn from current pyproject argv)."
+                    "Restart a server. Atomic for systemd-user; stop+start for "
+                    "command and the first-party server. Re-spawn uses current "
+                    "pyproject config."
                 ),
             },
             {

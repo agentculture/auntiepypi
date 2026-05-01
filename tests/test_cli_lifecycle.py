@@ -45,33 +45,87 @@ def stub_dispatch(monkeypatch):
     return stub
 
 
-# --------- Bare invocation reservation ---------
+# --------- Bare invocation: first-party server ---------
 
 
-def test_up_bare_invocation_exits_1_with_v060_message(tmp_path, monkeypatch, capsys):
+def test_up_bare_invocation_dispatches_local(tmp_path, monkeypatch, stub_dispatch):
     monkeypatch.chdir(tmp_path)
     _write_pyproject(tmp_path, "")
     rc = main(["up"])
+    assert rc == EXIT_SUCCESS
+    assert len(stub_dispatch.calls) == 1
+    action, det_name, spec_name, managed_by = stub_dispatch.calls[0]
+    assert action == "start"
+    assert det_name == "auntie"
+    assert spec_name == "auntie"
+    assert managed_by == "auntie"
+
+
+def test_down_bare_invocation_dispatches_stop(tmp_path, monkeypatch, stub_dispatch):
+    monkeypatch.chdir(tmp_path)
+    _write_pyproject(tmp_path, "")
+    stub_dispatch.result = ActionResult(ok=True, detail="stopped")
+    rc = main(["down"])
+    assert rc == EXIT_SUCCESS
+    assert stub_dispatch.calls[0][0] == "stop"
+    assert stub_dispatch.calls[0][2] == "auntie"
+
+
+def test_restart_bare_invocation_dispatches_restart(tmp_path, monkeypatch, stub_dispatch):
+    monkeypatch.chdir(tmp_path)
+    _write_pyproject(tmp_path, "")
+    stub_dispatch.result = ActionResult(ok=True, detail="restarted")
+    rc = main(["restart"])
+    assert rc == EXIT_SUCCESS
+    assert stub_dispatch.calls[0][0] == "restart"
+    assert stub_dispatch.calls[0][2] == "auntie"
+
+
+def test_up_bare_uses_configured_local_port(tmp_path, monkeypatch, stub_dispatch):
+    """Bare invocation reads [tool.auntiepypi.local] for host/port."""
+    monkeypatch.chdir(tmp_path)
+    _write_pyproject(
+        tmp_path,
+        """
+[tool.auntiepypi.local]
+host = "127.0.0.1"
+port = 9999
+""",
+    )
+
+    captured: dict = {}
+
+    def stub(action, det, spec):
+        captured["det"] = det
+        captured["spec"] = spec
+        return ActionResult(ok=True, detail="started")
+
+    monkeypatch.setattr(_actions, "dispatch", stub)
+    rc = main(["up"])
+    assert rc == EXIT_SUCCESS
+    assert captured["spec"].port == 9999
+    assert captured["det"].port == 9999
+
+
+def test_named_target_auntie_is_reserved(tmp_path, monkeypatch, capsys):
+    """`auntie up auntie` is rejected — bare form is the only way to act on the local server."""
+    monkeypatch.chdir(tmp_path)
+    _write_pyproject(
+        tmp_path,
+        """
+[[tool.auntiepypi.servers]]
+name = "auntie"
+flavor = "pypiserver"
+host = "127.0.0.1"
+port = 8080
+managed_by = "command"
+command = ["python", "-m", "http.server"]
+""",
+    )
+    rc = main(["up", "auntie"])
     assert rc == EXIT_USER_ERROR
     err = capsys.readouterr().err
-    assert "v0.6.0" in err
-    assert "auntie up <name>" in err or "auntie up --all" in err
-
-
-def test_down_bare_invocation_exits_1(tmp_path, monkeypatch, capsys):
-    monkeypatch.chdir(tmp_path)
-    _write_pyproject(tmp_path, "")
-    rc = main(["down"])
-    assert rc == EXIT_USER_ERROR
-    assert "v0.6.0" in capsys.readouterr().err
-
-
-def test_restart_bare_invocation_exits_1(tmp_path, monkeypatch, capsys):
-    monkeypatch.chdir(tmp_path)
-    _write_pyproject(tmp_path, "")
-    rc = main(["restart"])
-    assert rc == EXIT_USER_ERROR
-    assert "v0.6.0" in capsys.readouterr().err
+    assert "reserved" in err
 
 
 # --------- Single-target happy paths ---------
@@ -228,14 +282,15 @@ managed_by = "manual"
     assert "manual-one" not in names
 
 
-def test_up_all_with_no_servers_returns_success(tmp_path, monkeypatch, stub_dispatch, capsys):
+def test_up_all_with_no_servers_acts_on_local_only(tmp_path, monkeypatch, stub_dispatch):
+    """v0.6.0: --all always includes the first-party server, even when no servers are declared."""
     monkeypatch.chdir(tmp_path)
     _write_pyproject(tmp_path, "")
     rc = main(["up", "--all"])
     assert rc == EXIT_SUCCESS
-    out = capsys.readouterr().out
-    assert "nothing to do" in out
-    assert stub_dispatch.calls == []
+    assert len(stub_dispatch.calls) == 1
+    assert stub_dispatch.calls[0][2] == "auntie"
+    assert stub_dispatch.calls[0][3] == "auntie"
 
 
 def test_up_all_partial_failure_exits_2(tmp_path, monkeypatch, stub_dispatch):
@@ -258,8 +313,9 @@ managed_by = "command"
 command = ["pypi-server"]
 """,
     )
-    # Second call fails
+    # 3 calls: local first (ok), then first declared (ok), then second declared (fails)
     seq = [
+        ActionResult(ok=True, detail="started", pid=42),
         ActionResult(ok=True, detail="started", pid=111),
         ActionResult(ok=False, detail="exited immediately"),
     ]

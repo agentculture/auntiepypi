@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2026-05-01
+
+### Added
+
+- First-party PEP 503 simple-index server (read-only slice). `python -m auntiepypi._server --host H --port P --root R` serves `GET /simple/`, `GET /simple/<pkg>/`, and `GET /files/<filename>` from a wheelhouse. Stdlib-only (`http.server` + `ThreadingHTTPServer`).
+- `auntie up` / `auntie down` / `auntie restart` (bare invocation) now start, stop, and restart the first-party server. The `auntie up --all` form aggregates the first-party server with every supervised declaration.
+- `[tool.auntiepypi.local]` config block: `host` (loopback only in v0.6.0), `port` (default 3141), `root` (default `$XDG_DATA_HOME/auntiepypi/wheels`). Validated at config-load time; non-loopback host is rejected with a v0.7.0 forward-pointer.
+- `_actions/auntie.py` — third managed_by strategy. Wraps `command.py` with a derived argv (`python -m auntiepypi._server …`) so PID-tracking, reprobe, and SIGTERM/SIGKILL escalation are reused from v0.5.0.
+- `_detect/_local.py` — emits one Detection (`source="local"`, `flavor="auntiepypi"`, `managed_by="auntie"`) on every `auntie overview` call. Runs first in `detect_all` so the default-port scanner skips its endpoint.
+- The name `"auntie"` is reserved. `auntie up auntie` (named target) errors with a clear remediation; the bare form is the only entry point to the first-party server.
+
+### Changed
+
+- `_lifecycle.run_lifecycle` no longer raises on bare invocation. The `_bare_invocation_message` / `_bare_invocation_error` helpers are deleted.
+- `SUPERVISED_MODES` gains `"auntie"`.
+- `_detect/_runtime.detect_all` order: `_local` → `_declared` → `_port` → `_proc`. The local detection's `(host, port)` enters `covered` so `_port.detect` doesn't double-report 127.0.0.1:3141 as `devpi`.
+- Catalog (`_ROOT`, `_LIFECYCLE_PREAMBLE`, `_UP`, `_DOWN`, `_RESTART`) and `learn` synopsis describe the first-party-server lifecycle path; the v0.6.0 forward-pointer prose is removed.
+
+### Fixed
+
 ## [0.5.0] - 2026-04-30
 
 ### Added

@@ -20,6 +20,17 @@ _MAX_BODY_BYTES = 4096
 _USER_AGENT = f"auntie/{__version__}"
 
 
+def format_http_url(host: str, port: int, path: str = "/") -> str:
+    """Build ``http://host:port<path>`` with IPv6 bracketing.
+
+    Bare ``::1`` (and other IPv6 literals) must be wrapped in ``[...]``
+    in URLs (RFC 3986 §3.2.2). Hostnames and IPv4 literals pass through
+    unchanged.
+    """
+    bracketed = f"[{host}]" if ":" in host else host
+    return f"http://{bracketed}:{port}{path}"  # NOSONAR S5332 (localhost-only)
+
+
 @dataclass(frozen=True)
 class ProbeOutcome:
     """Result of one TCP+HTTP probe."""
@@ -70,7 +81,7 @@ def probe_endpoint(
     """
     # `pypi-server` and `devpi-server` default to plain HTTP on localhost;
     # HTTPS is not the protocol these servers speak in their default config.
-    url = f"http://{host}:{port}{path}"  # NOSONAR S5332 (localhost-only) noqa: S310 nosec B310
+    url = format_http_url(host, port, path)  # noqa: S310 nosec B310
     if not _tcp_open(host, port, timeout):
         return ProbeOutcome(url=url, tcp_open=False, http_status=None, body=None, error=None)
     req = urllib.request.Request(url, headers={"User-Agent": _USER_AGENT, "Accept": "*/*"})

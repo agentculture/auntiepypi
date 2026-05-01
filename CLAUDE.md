@@ -2,20 +2,25 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Status: v0.4.0 — `doctor` lifecycle landed
+## Status: v0.6.0 — first-party PEP 503 server landed
 
-`auntie doctor` is now a managed_by-aware lifecycle dispatcher. The
-old `--fix` flag is replaced by `--apply`; `_probes/` is deleted and
-doctor consumes `_detect/` directly. A new `_actions/` module provides
-two dispatch strategies: `systemd-user` (starts a systemd user unit;
-stop is v0.5.0 territory) and `command` (runs an arbitrary shell command). Before any
-`pyproject.toml` mutation, a numbered `.bak` snapshot is written
-(`pyproject.toml.1.bak`, `pyproject.toml.2.bak`, …). The `packages`
-noun is permanently removed — use `auntie overview <PKG>` instead.
-Ambiguous duplicate-name entries are resolved via
-`--decide=duplicate:NAME=N`.
+Bare `auntie up` / `auntie down` / `auntie restart` now start, stop,
+and restart auntie's own PEP 503 simple-index server (read-only slice
+— `GET /simple/`, `GET /simple/<pkg>/`, `GET /files/<filename>`). The
+server is stdlib-only (`http.server` + `ThreadingHTTPServer`),
+configured by `[tool.auntiepypi.local]` (host loopback-only in v0.6.0,
+default port 3141, default wheelhouse
+`$XDG_DATA_HOME/auntiepypi/wheels/`), and plugs into the existing
+lifecycle machinery as a third managed_by strategy `"auntie"` that
+wraps `command.py` with a derived argv. The name `"auntie"` is
+reserved as a server name. `auntie overview` always surfaces a local
+section (status reflects the probe).
 
-See `docs/superpowers/specs/2026-04-30-auntiepypi-v0.4.0-doctor-lifecycle-design.md`
+`auntie publish`, HTTPS termination, and basic-auth are deferred to
+v0.7.0 (the auth + public-binding bundle). The mesh-aware service
+registry is v1.0.0.
+
+See `docs/superpowers/specs/2026-05-01-auntiepypi-v0.6.0-local-server-design.md`
 for the full design rationale.
 
 This file describes the repository **as it exists on disk today**. When
@@ -120,7 +125,7 @@ auntie <verb> [args] [--json]
 Both `auntie` and `auntiepypi` are registered console scripts pointing
 at the same `auntiepypi.cli:main`.
 
-Active verbs registered at v0.5.0:
+Active verbs registered at v0.6.0:
 
 - `auntie learn` (and `learn --json`) — self-teaching prompt generated
   from the `auntiepypi/explain/catalog.py` catalog so it can never
@@ -149,20 +154,21 @@ Active verbs registered at v0.5.0:
   one server. Exits `2` when `--apply` was attempted and any actionable
   server is still down after re-probe.
 - `auntie up [TARGET | --all] [--decide=...] [--json]` — start a
-  declared server. Bare invocation (no TARGET, no `--all`) exits `1`
-  with a forward-pointing message reserving the bare form for v0.6.0's
-  first-party server. `--all` acts on every supervised declaration
-  (managed_by ∈ {systemd-user, command}); other modes are skipped with
-  a stderr note. Per-target refusal for unsupervised modes.
+  server. **Bare** (no TARGET, no `--all`): start the first-party
+  PEP 503 server using `[tool.auntiepypi.local]`. **Named TARGET**:
+  one declared server (managed_by ∈ {systemd-user, command}; the name
+  `"auntie"` is reserved). **`--all`**: first-party server plus every
+  supervised declaration. Other modes are skipped with a stderr note.
 - `auntie down [TARGET | --all] [--decide=...] [--json]` — stop a
-  declared server. For `command`: SIGTERM with 5 s grace, SIGKILL
-  fallback, then PID file cleanup. Linux-only port-walk + argv-match
-  fallback when no PID file exists. Idempotent: nothing-to-stop is
-  `ok=True, detail="already stopped"`.
+  server. Same target shape as `up`. For `command` and `auntie`:
+  SIGTERM with 5 s grace, SIGKILL fallback, then PID file cleanup.
+  Linux-only port-walk + argv-match fallback when no PID file exists.
+  Idempotent: nothing-to-stop is `ok=True, detail="already stopped"`.
 - `auntie restart [TARGET | --all] [--decide=...] [--json]` — atomic
   for `systemd-user` (`systemctl --user restart`); stop+start for
-  `command`, re-spawning from the **current** pyproject `command`.
-  Sidecar argv drift is logged but never blocks the action.
+  `command` and the first-party server, re-spawning from the
+  **current** pyproject (`command` array or `[tool.auntiepypi.local]`
+  respectively). Sidecar argv drift is logged but never blocks.
 - `auntie whoami [--json]` — auth/env probe; reads `$PIP_INDEX_URL` /
   `$UV_INDEX_URL` env vars and pip's global config file. Exact paths
   inspected live in `auntiepypi/cli/_commands/whoami.py`.
@@ -215,10 +221,16 @@ burned on the `agentpypi → auntiepypi` rename. The table below uses
    for `command`; argv-matched port-walk fallback. Bare invocation
    reserved for v0.6.0. See spec
    `docs/superpowers/specs/2026-04-30-auntiepypi-v0.5.0-lifecycle-verbs-design.md`.
-6. **semver 0.6.0 — own server.** First-party PEP 503 simple-index for
-   mesh-private use; bare `auntie up` / `down` / `restart` start/stop
-   the in-process server. HTTPS surface introduced here.
-7. **semver 1.0.0 — mesh-aware.** Local index discoverable via Culture-mesh
+6. **semver 0.6.0 — own server (shipped).** First-party PEP 503
+   simple-index for mesh-private use (read-only slice); bare
+   `auntie up` / `down` / `restart` start/stop the in-process server.
+   `auntie` strategy wraps `command.py` with a derived argv. Loopback-
+   only binding; `"auntie"` is a reserved server name. See spec
+   `docs/superpowers/specs/2026-05-01-auntiepypi-v0.6.0-local-server-design.md`.
+7. **semver 0.7.0 — auth + public binding.** Basic-auth and HTTPS
+   termination, lifting the loopback restriction. `auntie publish`
+   upload path lands here too.
+8. **semver 1.0.0 — mesh-aware.** Local index discoverable via Culture-mesh
    service registry; trust boundary documented in `docs/threat-model.md`.
 
 This roadmap is descriptive of intent, not a commitment. Reorder or

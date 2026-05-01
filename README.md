@@ -6,14 +6,17 @@
 > running locally, and starts/stops/restarts declared servers —
 > informational first, actionable on demand.
 
-**Status:** v0.5.0 — lifecycle verbs landed. `auntie up`,
-`auntie down`, and `auntie restart` are first-class verbs against
-declared servers (`managed_by ∈ {systemd-user, command}`). The
-`_actions/` strategy contract has widened from a single `apply()` to
-sibling `start` / `stop` / `restart` per strategy. `command`-managed
-servers are now PID-tracked (`$XDG_STATE_HOME/auntiepypi/<slug>.pid`)
-with a Linux port-walk fallback. The bare invocation (`auntie up`
-with no target) is reserved for v0.6.0's first-party PyPI server.
+**Status:** v0.6.0 — first-party PEP 503 server landed. Bare
+`auntie up` / `auntie down` / `auntie restart` now start, stop, and
+restart auntie's own simple-index server (read-only slice; configured
+by `[tool.auntiepypi.local]`; loopback-only). Wheels in
+`$XDG_DATA_HOME/auntiepypi/wheels/` are served from
+`http://127.0.0.1:3141/simple/` and installable via
+`pip install --index-url`. Lifecycle verbs continue to work against
+declared servers (`managed_by ∈ {systemd-user, command}`); `--all`
+now aggregates the first-party server with every supervised
+declaration. `auntie publish`, HTTPS, and basic-auth are deferred to
+v0.7.0.
 
 ## Quick start
 
@@ -24,8 +27,10 @@ auntie overview --json | jq '.sections[] | select(.category == "servers")'
 auntie overview requests            # deep-dive into a PyPI package
 auntie doctor                       # diagnose declared servers (dry-run)
 auntie doctor --apply               # act on actionable remediations
+auntie up                           # start the first-party PEP 503 server
 auntie up <name>                    # start one declared server
-auntie down --all                   # stop every supervised server
+auntie up --all                     # first-party server + every supervised declaration
+auntie down                         # stop the first-party server
 auntie restart <name>               # atomic for systemd-user; stop+start for command
 ```
 

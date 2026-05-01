@@ -14,9 +14,10 @@ def test_overview_text_no_args(capsys: pytest.CaptureFixture[str]) -> None:
     out = capsys.readouterr().out
     assert out.strip()
     assert "# auntie" in out
-    # v0.1.0: servers appear by their probe name (devpi / pypiserver), not
-    # as the legacy "local-pypi-servers" aggregate section header.
-    assert any(name in out for name in ("devpi", "pypiserver"))
+    # Servers appear by their probe name. v0.6.0 always emits the
+    # first-party "auntie" detection (status="absent" when not running),
+    # so the section is reliably populated even on bare environments.
+    assert any(name in out for name in ("auntie", "devpi", "pypiserver"))
 
 
 def test_overview_json_shape(capsys: pytest.CaptureFixture[str]) -> None:

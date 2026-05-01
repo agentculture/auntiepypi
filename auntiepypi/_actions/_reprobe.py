@@ -45,8 +45,11 @@ def _attempt(detection: Detection) -> ReprobeResult:
     if not 200 <= outcome.http_status < 300:
         return ReprobeResult(status="down", detail=f"http {outcome.http_status}")
 
-    # 2xx — verify flavor unless declared flavor is "unknown"
-    if detection.flavor != "unknown":
+    # 2xx — verify flavor unless declared flavor is "unknown" or
+    # "auntiepypi" (the first-party server's PEP 503 surface looks
+    # identical to pypiserver via the HREF fingerprint, so the check
+    # would always claim a flavor mismatch).
+    if detection.flavor not in ("unknown", "auntiepypi"):
         observed = fingerprint_flavor(outcome.body, content_type(outcome))
         if observed != detection.flavor and observed != "unknown":
             return ReprobeResult(
