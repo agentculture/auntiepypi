@@ -52,9 +52,24 @@ def _detection(port: int, flavor: str = "pypiserver") -> Detection:
         flavor=flavor,
         host="127.0.0.1",
         port=port,
-        url=f"http://127.0.0.1:{port}/",
+        url=f"http://127.0.0.1:{port}/",  # NOSONAR python:S5332 - test fixture
         status="down",
         source="declared",
+    )
+
+
+def _fake_outcome(host: str, port: int, *, http_status: int, body: bytes = b""):
+    """Build a ProbeOutcome for tests. The URL is a fixture string only;
+    no network connection is made and no creds traverse it.
+    """
+    from auntiepypi._detect._http import ProbeOutcome
+
+    return ProbeOutcome(
+        url=f"http://{host}:{port}/",  # NOSONAR python:S5332 - test fixture
+        tcp_open=True,
+        http_status=http_status,
+        body=body,
+        error=None,
     )
 
 
@@ -94,15 +109,7 @@ def test_reprobe_local_uses_https_when_tls_configured(monkeypatch, tmp_path):
     def fake_probe(host, port, **kw):
         captured["scheme"] = kw.get("scheme")
         captured["ssl_context"] = kw.get("ssl_context")
-        from auntiepypi._detect._http import ProbeOutcome
-
-        return ProbeOutcome(
-            url=f"https://{host}:{port}/",
-            tcp_open=True,
-            http_status=200,
-            body=b"<html>",
-            error=None,
-        )
+        return _fake_outcome(host, port, http_status=200, body=b"<html>")
 
     from auntiepypi._actions import _reprobe
 
@@ -130,15 +137,7 @@ def test_reprobe_local_treats_401_as_up_when_auth_configured(monkeypatch, tmp_pa
     monkeypatch.chdir(tmp_path)
 
     def fake_probe(host, port, **kw):
-        from auntiepypi._detect._http import ProbeOutcome
-
-        return ProbeOutcome(
-            url=f"http://{host}:{port}/",
-            tcp_open=True,
-            http_status=401,
-            body=b"401\n",
-            error=None,
-        )
+        return _fake_outcome(host, port, http_status=401, body=b"401\n")
 
     from auntiepypi._actions import _reprobe
 
@@ -148,7 +147,7 @@ def test_reprobe_local_treats_401_as_up_when_auth_configured(monkeypatch, tmp_pa
         flavor="auntiepypi",
         host="127.0.0.1",
         port=3141,
-        url="http://127.0.0.1:3141/",
+        url="http://127.0.0.1:3141/",  # NOSONAR python:S5332 - test fixture
         status="absent",
         source="local",
     )
@@ -161,15 +160,7 @@ def test_reprobe_local_401_without_auth_is_down(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
 
     def fake_probe(host, port, **kw):
-        from auntiepypi._detect._http import ProbeOutcome
-
-        return ProbeOutcome(
-            url=f"http://{host}:{port}/",
-            tcp_open=True,
-            http_status=401,
-            body=b"401\n",
-            error=None,
-        )
+        return _fake_outcome(host, port, http_status=401, body=b"401\n")
 
     from auntiepypi._actions import _reprobe
 
@@ -179,7 +170,7 @@ def test_reprobe_local_401_without_auth_is_down(monkeypatch, tmp_path):
         flavor="auntiepypi",
         host="127.0.0.1",
         port=3141,
-        url="http://127.0.0.1:3141/",
+        url="http://127.0.0.1:3141/",  # NOSONAR python:S5332 - test fixture
         status="absent",
         source="local",
     )
@@ -201,15 +192,7 @@ def test_reprobe_declared_source_unchanged(monkeypatch, tmp_path):
     def fake_probe(host, port, **kw):
         captured["scheme"] = kw.get("scheme")
         captured["ssl_context"] = kw.get("ssl_context")
-        from auntiepypi._detect._http import ProbeOutcome
-
-        return ProbeOutcome(
-            url=f"http://{host}:{port}/",
-            tcp_open=True,
-            http_status=200,
-            body=b"<html>",
-            error=None,
-        )
+        return _fake_outcome(host, port, http_status=200, body=b"<html>")
 
     from auntiepypi._actions import _reprobe
 
@@ -219,7 +202,7 @@ def test_reprobe_declared_source_unchanged(monkeypatch, tmp_path):
         flavor="pypiserver",
         host="127.0.0.1",
         port=8080,
-        url="http://127.0.0.1:8080/",
+        url="http://127.0.0.1:8080/",  # NOSONAR python:S5332 - test fixture
         status="absent",
         source="declared",
     )
