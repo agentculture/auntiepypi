@@ -29,6 +29,9 @@ from urllib.parse import unquote, urlparse
 
 from auntiepypi._server._wheelhouse import list_projects, normalize
 
+_SIMPLE_PREFIX = "/simple/"
+_FILES_PREFIX = "/files/"
+
 # Strict filename pattern: PEP 427/625 dist files + no path components.
 # Permits the same charset filenames carry on PyPI.
 _SAFE_FILENAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+-]*\.(whl|tar\.gz|zip)$")
@@ -49,10 +52,10 @@ def make_handler(root: Path) -> type[BaseHTTPRequestHandler]:
 
             if path == "/":
                 return self._serve_root()
-            if path == "/simple/":
+            if path == _SIMPLE_PREFIX:
                 return self._serve_index()
-            if path.startswith("/simple/"):
-                tail = path[len("/simple/") :]
+            if path.startswith(_SIMPLE_PREFIX):
+                tail = path[len(_SIMPLE_PREFIX) :]
                 # Strip an optional single trailing slash; reject anything
                 # with internal separators (sub-paths).
                 if tail.endswith("/"):
@@ -60,8 +63,8 @@ def make_handler(root: Path) -> type[BaseHTTPRequestHandler]:
                 if "/" in tail or not tail:
                     return self._send_status(404)
                 return self._serve_project(tail)
-            if path.startswith("/files/"):
-                tail = path[len("/files/") :]
+            if path.startswith(_FILES_PREFIX):
+                tail = path[len(_FILES_PREFIX) :]
                 return self._serve_file(tail)
             return self._send_status(404)
 

@@ -60,9 +60,10 @@ def test_is_loopback_recognizes_aliases():
 
 def test_is_loopback_rejects_public():
     # The hardcoded IPs below are fixtures asserting that _is_loopback
-    # REJECTS them; they are never used to dial out. NOSONAR/noqa pin
-    # the rule explicitly so future linter updates don't silently flag
-    # the surrounding test as a real-world IP usage.
+    # rejects them; they are never used to dial out. The trailing
+    # markers pin the linter rule on each line so future linter
+    # updates don't silently flag the surrounding test as a
+    # real-world IP usage.
     assert not _is_loopback("0.0.0.0")  # noqa: S104
     assert not _is_loopback("10.0.0.1")  # NOSONAR python:S1313
     assert not _is_loopback("8.8.8.8")  # NOSONAR python:S1313

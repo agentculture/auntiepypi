@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import sys
 from dataclasses import replace
+from typing import cast
 
 from auntiepypi._actions import _pid
 from auntiepypi._actions import command as _command
@@ -52,12 +53,17 @@ def _materialize(declaration: ServerSpec) -> ServerSpec:
     editing pyproject between start and restart).
     """
     cfg = load_local_config()
-    return replace(
-        declaration,
-        host=cfg.host,
-        port=cfg.port,
-        managed_by="command",
-        command=_argv(cfg),
+    # ``dataclasses.replace`` is annotated as returning ``DataclassInstance``
+    # in the typeshed stubs; cast back to ServerSpec for the call site.
+    return cast(
+        ServerSpec,
+        replace(
+            declaration,
+            host=cfg.host,
+            port=cfg.port,
+            managed_by="command",
+            command=_argv(cfg),
+        ),
     )
 
 

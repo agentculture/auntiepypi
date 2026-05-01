@@ -151,7 +151,7 @@ def test_files_404_when_absent(served):
 
 def test_files_rejects_path_traversal(served, tmp_path):
     """`..` segments must not escape the wheelhouse root."""
-    port, root = served
+    port, _ = served
     secret = tmp_path.parent / "secret.txt"
     secret.write_text("private")
     # http.client URL-encodes %2e%2e; try both the raw and encoded forms.
