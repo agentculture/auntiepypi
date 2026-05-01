@@ -164,22 +164,25 @@ def test_auth_does_not_bypass_path_traversal(served_with_auth):
     assert status == 404
 
 
-def test_post_still_405_with_auth(served_with_auth):
-    """POST is still rejected even with valid creds (read-only server)."""
+def test_post_rejected_when_publish_not_configured(served_with_auth):
+    """v0.7.0 fixture has auth but no publish_users — POST is auth-OK
+    but authz-rejected (403 'publish disabled'). Regression: POST
+    behaviour stays sealed when the operator hasn't opted into v0.8.0
+    publish authz.
+    """
     port, _, _ = served_with_auth
     conn = HTTPConnection("127.0.0.1", port, timeout=5)
     try:
         conn.request(
             "POST",
-            "/simple/",
+            "/",
             body=b"",
             headers={"Authorization": _basic_header("alice", "secret")},
         )
         resp = conn.getresponse()
-        assert resp.status in (401, 405, 501)
-        # Note: the auth check runs only in do_GET; POST takes a different
-        # code path in BaseHTTPRequestHandler (no do_POST defined → 501).
-        # Either outcome (401 from gate or 501 from no-handler) is fine.
+        # v0.7.0 fixture sets htpasswd_map but leaves publish_users
+        # at its default (empty tuple) → 403 publish disabled.
+        assert resp.status == 403
         resp.read()
     finally:
         conn.close()
