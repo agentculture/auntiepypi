@@ -40,6 +40,9 @@ locally. Informational, not gating.
   stop+start for `command`. Always re-spawns from the current
   `pyproject.toml` argv (or `[tool.auntiepypi.local]` for the bare
   form).
+- `auntie publish <path>` — upload a wheel/sdist to the configured
+  local index. Requires `publish_users` allowlist + htpasswd creds
+  via `$AUNTIE_PUBLISH_USER` / `$AUNTIE_PUBLISH_PASSWORD`.
 - `auntie whoami` — auth/env probe; reports configured indexes.
 
 ## Console scripts
@@ -65,6 +68,7 @@ The package installs two scripts that point at the same entry point:
 - `auntie explain up`
 - `auntie explain down`
 - `auntie explain restart`
+- `auntie explain publish`
 - `auntie explain whoami`
 """
 
@@ -373,6 +377,63 @@ probe machinery `overview` uses to flag local indexes that are
 Read-only.
 """
 
+_PUBLISH = """\
+# auntie publish
+
+Upload a wheel or sdist to the configured local index
+(`[tool.auntiepypi.local]`).
+
+Uses the legacy PyPI upload protocol (`POST /` with
+`multipart/form-data`, `:action=file_upload`) — twine, flit, hatch,
+and the v0.8.0 first-party server all speak it.
+
+## Authorization
+
+The server requires both authentication AND an authz allowlist:
+
+    [tool.auntiepypi.local]
+    htpasswd      = "/etc/auntie/htpasswd"
+    publish_users = ["alice", "bob"]
+
+`publish_users` empty / unset → no one publishes (read-only mode
+preserved). `publish_users` set + caller in the list → upload
+accepted.
+
+## Credentials
+
+Read from environment, then prompt:
+
+- `$AUNTIE_PUBLISH_USER` (or `input("user: ")`)
+- `$AUNTIE_PUBLISH_PASSWORD` (or `getpass.getpass()`)
+
+Non-TTY environments without env vars set exit 2 (no silent block).
+
+## Usage
+
+    auntie publish dist/mypkg-1.0-py3-none-any.whl
+    auntie publish dist/mypkg-1.0.tar.gz --json
+
+## TLS
+
+When `[tool.auntiepypi.local].cert` and `.key` are set, the URL
+becomes `https://...`. Verification is on by default; for self-signed
+certs, set `AUNTIE_INSECURE_SKIP_VERIFY=1` (a stderr warning fires
+each invocation).
+
+## Exit codes
+
+- 0 — server accepted (HTTP 2xx).
+- 1 — server rejected (HTTP 4xx / 5xx).
+  Common: 401 (bad creds), 403 (user not in `publish_users`,
+  or `publish_users` empty), 409 (file already exists — pick a new
+  version), 413 (over `max_upload_bytes`).
+- 2 — transport error (DNS / connect / TLS) or local file problem
+  (path missing, unrecognized distribution filename).
+
+No yank/delete: to retract a wheel, the operator deletes the file
+from `cfg.root` directly. v0.8.0 does not provide a delete API.
+"""
+
 ENTRIES: dict[tuple[str, ...], str] = {
     (): _ROOT,
     ("auntiepypi",): _ROOT,
@@ -384,5 +445,6 @@ ENTRIES: dict[tuple[str, ...], str] = {
     ("up",): _UP,
     ("down",): _DOWN,
     ("restart",): _RESTART,
+    ("publish",): _PUBLISH,
     ("whoami",): _WHOAMI,
 }
