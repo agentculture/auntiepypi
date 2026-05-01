@@ -16,12 +16,11 @@ from auntiepypi._server import __main__ as server_main
 
 def test_parser_defaults():
     # /tmp path is an argparse fixture, never created on disk.
-    args = server_main._parser().parse_args(
-        ["--root", "/tmp/wh"]
-    )  # noqa: S108  # NOSONAR python:S5443
+    fixture_root = "/tmp/wh"  # noqa: S108  # NOSONAR python:S5443
+    args = server_main._parser().parse_args(["--root", fixture_root])
     assert args.host == "127.0.0.1"
     assert args.port == 3141
-    assert args.root == Path("/tmp/wh")  # noqa: S108  # NOSONAR python:S5443
+    assert args.root == Path(fixture_root)
 
 
 def test_parser_overrides():
