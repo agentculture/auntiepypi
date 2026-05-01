@@ -5,8 +5,11 @@ filesystem wheelhouse, loopback-only.
 
 v0.7.0 adds optional HTTPS termination (``ssl_context=...``) and HTTP
 Basic auth (``htpasswd_map=...``). When both are configured at
-config-load time, the loopback restriction lifts. ``auntie publish``
-remains deferred to v0.8.0.
+config-load time, the loopback restriction lifts.
+
+v0.8.0 adds the write side: ``publish_users`` (allowlist of
+htpasswd usernames permitted to POST uploads) and ``max_upload_bytes``
+(per-request body cap). Empty allowlist preserves read-only mode.
 
 Public surface lives in :mod:`auntiepypi._server.__init__` (this
 module). The HTTP layer is :mod:`._app`; filesystem walk lives in
@@ -24,6 +27,7 @@ from pathlib import Path
 from typing import Callable
 
 from auntiepypi._server._app import make_handler
+from auntiepypi._server._config import _DEFAULT_MAX_UPLOAD_BYTES
 
 __all__ = ["serve"]
 
@@ -35,6 +39,8 @@ def serve(
     *,
     ssl_context: ssl.SSLContext | None = None,
     htpasswd_map: dict[str, bytes] | None = None,
+    publish_users: tuple[str, ...] = (),
+    max_upload_bytes: int = _DEFAULT_MAX_UPLOAD_BYTES,
     server_factory: Callable[..., ThreadingHTTPServer] = ThreadingHTTPServer,
 ) -> None:
     """Run the simple-index HTTP(S) server until SIGTERM/SIGINT.
@@ -46,10 +52,20 @@ def serve(
     ``htpasswd_map`` (when set) gates every GET through Basic auth
     (see :mod:`._app`).
 
+    ``publish_users`` (when non-empty, requires ``htpasswd_map``) lets
+    those usernames POST uploads at ``/``. Empty allowlist → POST
+    returns 403 ``"publish disabled"``. ``max_upload_bytes`` caps the
+    POST body size (default 100 MiB).
+
     ``server_factory`` is a test indirection — production callers
     accept the default ``ThreadingHTTPServer``.
     """
-    handler_cls = make_handler(root, htpasswd_map=htpasswd_map)
+    handler_cls = make_handler(
+        root,
+        htpasswd_map=htpasswd_map,
+        publish_users=publish_users,
+        max_upload_bytes=max_upload_bytes,
+    )
     httpd = server_factory((host, port), handler_cls)
     if ssl_context is not None:
         # In-flight TLS connections may log noisy ssl.SSLError on

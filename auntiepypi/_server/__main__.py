@@ -13,6 +13,13 @@ not enforced here — the ``[tool.auntiepypi.local]`` validator in
 :mod:`auntiepypi._detect._config` is the source of truth on legality.
 This module only enforces ``--cert``+``--key`` pairing as a usability
 guard against accidentally invoking with a half-configured TLS pair.
+
+v0.8.0 adds ``--publish-user NAME`` (repeatable) and
+``--max-upload-bytes N``: the publish allowlist and per-request body
+cap. Defaults preserve v0.7.0 read-only behavior — no ``--publish-user``
+means no one can POST. The cross-checks (publish_users requires
+htpasswd, names must exist in htpasswd) live in the config-load
+validator; this module just passes the values through.
 """
 
 from __future__ import annotations
@@ -24,6 +31,7 @@ from typing import Sequence
 
 from auntiepypi._server import serve
 from auntiepypi._server._auth import parse_htpasswd
+from auntiepypi._server._config import _DEFAULT_MAX_UPLOAD_BYTES
 from auntiepypi._server._tls import build_ssl_context
 
 
@@ -62,6 +70,21 @@ def _parser() -> argparse.ArgumentParser:
         default=None,
         help="Apache htpasswd file (bcrypt-only) for HTTP Basic auth",
     )
+    p.add_argument(
+        "--publish-user",
+        action="append",
+        default=[],
+        metavar="NAME",
+        help="username allowed to POST uploads (repeatable; "
+        "requires --htpasswd; empty list = no one publishes)",
+    )
+    p.add_argument(
+        "--max-upload-bytes",
+        type=int,
+        default=_DEFAULT_MAX_UPLOAD_BYTES,
+        help=f"reject uploads larger than this (bytes; default "
+        f"{_DEFAULT_MAX_UPLOAD_BYTES})",
+    )
     return p
 
 
@@ -91,6 +114,8 @@ def main(argv: Sequence[str] | None = None) -> None:
         args.root,
         ssl_context=ssl_context,
         htpasswd_map=htpasswd_map,
+        publish_users=tuple(args.publish_user),
+        max_upload_bytes=args.max_upload_bytes,
     )
 
 
