@@ -283,7 +283,7 @@ def _validate_local_host(host: object) -> str:
 def _validate_local_port(port: object) -> int:
     if not isinstance(port, int) or isinstance(port, bool) or not 1 <= port <= 65535:
         raise ServerConfigError(
-            f"[tool.auntiepypi.local] 'port' out of range " f"(got {port!r}; expected int 1..65535)"
+            f"[tool.auntiepypi.local] 'port' out of range (got {port!r}; expected int 1..65535)"
         )
     return port
 
