@@ -13,12 +13,16 @@ Three pieces:
    ``pip install`` (which opens many connections) snappy without
    weakening the per-credential check.
 
-3. :func:`verify_basic` — parse ``Authorization: Basic <b64>``,
+3. :func:`authenticate_user` — parse ``Authorization: Basic <b64>``,
    bcrypt-verify against the htpasswd map, and write to the cache on
-   success. Returns ``False`` for any failure mode (missing header,
-   wrong scheme, malformed base64, unknown user, password mismatch).
-   Never raises on malformed input — auth bypass via 500 is its own
-   bug class.
+   success. Returns the authenticated **username** on success, or
+   ``None`` for any failure mode (missing header, wrong scheme,
+   malformed base64, unknown user, password mismatch). Never raises
+   on malformed input — auth bypass via 500 is its own bug class.
+
+4. :func:`verify_basic` — bool adapter over :func:`authenticate_user`
+   for read-side callers that only care whether the request is
+   authenticated, not who it is. Kept for v0.7.0 call-site stability.
 
 The cache is a module-level singleton because the handler factory
 re-binds htpasswd_map per server instance but verify_basic is called
@@ -42,6 +46,7 @@ import bcrypt
 
 __all__ = [
     "HtpasswdError",
+    "authenticate_user",
     "parse_htpasswd",
     "verify_basic",
 ]
@@ -132,23 +137,28 @@ class _AuthCache:
 _cache = _AuthCache()
 
 
-def verify_basic(raw_header: str, htpasswd_map: dict[str, bytes]) -> bool:
+def authenticate_user(raw_header: str, htpasswd_map: dict[str, bytes]) -> str | None:
     """Verify ``Authorization: Basic <b64>`` against ``htpasswd_map``.
 
-    Returns ``True`` only when the header is well-formed Basic auth
-    and the credentials bcrypt-match an entry in the map. Returns
-    ``False`` for every other case — never raises.
+    Returns the authenticated **username** when the header is
+    well-formed Basic auth and the credentials bcrypt-match an entry
+    in the map. Returns ``None`` for every other case — never raises.
+
+    This is the v0.8.0 primitive: publish authz needs to know *which*
+    user uploaded, so the bool-only :func:`verify_basic` from v0.7.0
+    delegates here and adapts to bool for read-side callers that don't
+    care about identity.
     """
     if not raw_header or not raw_header.startswith(_BASIC_PREFIX):
-        return False
+        return None
     cache_hit = _cache.get(raw_header)
     if cache_hit is not None:
         cached_user, cached_hash = cache_hit
-        # Honor the cached True only if the map still has the same
+        # Honor the cached hit only if the map still has the same
         # (user → expected_hash) binding. Rotation / user removal /
         # fresh map all invalidate naturally.
         if htpasswd_map.get(cached_user) == cached_hash:
-            return True
+            return cached_user
         # Fall through to re-verify under the current map.
     payload = raw_header[len(_BASIC_PREFIX) :].strip()
     try:
@@ -156,21 +166,31 @@ def verify_basic(raw_header: str, htpasswd_map: dict[str, bytes]) -> bool:
     except binascii.Error:
         # binascii.Error is a subclass of ValueError; catching the more
         # specific exception is sufficient and clearer.
-        return False
+        return None
     sep = decoded.find(b":")
     if sep < 0:
-        return False
+        return None
     user = decoded[:sep].decode("utf-8", errors="replace")
     password = decoded[sep + 1 :]
     expected = htpasswd_map.get(user)
     if expected is None:
-        return False
+        return None
     try:
         ok = bcrypt.checkpw(password, expected)
     except ValueError:
         # bcrypt raises on malformed hash, but parse_htpasswd already
         # screened the prefixes; this is defence-in-depth.
-        return False
-    if ok:
-        _cache.put(raw_header, user, expected)
-    return ok
+        return None
+    if not ok:
+        return None
+    _cache.put(raw_header, user, expected)
+    return user
+
+
+def verify_basic(raw_header: str, htpasswd_map: dict[str, bytes]) -> bool:
+    """Bool adapter over :func:`authenticate_user`.
+
+    Read-side callers (``do_GET``) don't need the username; this
+    keeps the v0.7.0 call sites unchanged.
+    """
+    return authenticate_user(raw_header, htpasswd_map) is not None
