@@ -124,6 +124,74 @@ def test_argv_full_bundle(tmp_path):
     assert "--htpasswd" in argv
 
 
+def test_argv_omits_publish_flags_when_unconfigured(tmp_path):
+    """v0.7.0 pyprojects (no publish_users / no max_upload_bytes
+    override) get the same argv as before — no new flags appended."""
+    cfg = LocalConfig(host="127.0.0.1", root=tmp_path / "wheels")
+    argv = _auntie._argv(cfg)
+    assert "--publish-user" not in argv
+    assert "--max-upload-bytes" not in argv
+
+
+def test_argv_appends_publish_users_one_flag_per_name(tmp_path):
+    """argparse `action="append"` requires --publish-user repeated."""
+    htp = tmp_path / "htp"
+    cfg = LocalConfig(
+        root=tmp_path / "wheels",
+        htpasswd=htp,
+        publish_users=("alice", "bob"),
+    )
+    argv = _auntie._argv(cfg)
+    # The flag appears twice, each followed by a name in order.
+    assert argv.count("--publish-user") == 2
+    idx_alice = argv.index("alice")
+    idx_bob = argv.index("bob")
+    # Each --publish-user precedes its name.
+    assert argv[idx_alice - 1] == "--publish-user"
+    assert argv[idx_bob - 1] == "--publish-user"
+
+
+def test_argv_appends_max_upload_bytes_when_overridden(tmp_path):
+    cfg = LocalConfig(
+        root=tmp_path / "wheels",
+        max_upload_bytes=2 * 1024 * 1024 * 1024,
+    )
+    argv = _auntie._argv(cfg)
+    assert "--max-upload-bytes" in argv
+    idx = argv.index("--max-upload-bytes")
+    assert argv[idx + 1] == str(2 * 1024 * 1024 * 1024)
+
+
+def test_argv_omits_max_upload_bytes_at_default(tmp_path):
+    """The default cap doesn't need an explicit flag — argv stays terse."""
+    cfg = LocalConfig(
+        root=tmp_path / "wheels",
+        max_upload_bytes=100 * 1024 * 1024,  # the default
+    )
+    argv = _auntie._argv(cfg)
+    assert "--max-upload-bytes" not in argv
+
+
+def test_argv_full_v8_bundle(tmp_path):
+    cert = tmp_path / "c.pem"
+    key = tmp_path / "k.pem"
+    htp = tmp_path / "htp"
+    cfg = LocalConfig(
+        host="127.0.0.1",
+        port=3141,
+        root=tmp_path / "wheels",
+        cert=cert,
+        key=key,
+        htpasswd=htp,
+        publish_users=("alice",),
+        max_upload_bytes=42 * 1024 * 1024,
+    )
+    argv = _auntie._argv(cfg)
+    for flag in ("--cert", "--key", "--htpasswd", "--publish-user", "--max-upload-bytes"):
+        assert flag in argv, f"missing {flag} in {argv}"
+    assert argv[argv.index("--publish-user") + 1] == "alice"
+
+
 # --------- ACTIONS registration ---------
 
 

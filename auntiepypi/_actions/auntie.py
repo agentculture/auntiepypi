@@ -27,7 +27,7 @@ from auntiepypi._actions._action import ActionResult
 from auntiepypi._actions._reprobe import probe
 from auntiepypi._detect._config import ServerSpec, load_local_config
 from auntiepypi._detect._detection import Detection
-from auntiepypi._server._config import LocalConfig
+from auntiepypi._server._config import _DEFAULT_MAX_UPLOAD_BYTES, LocalConfig
 
 
 def _argv(cfg: LocalConfig) -> tuple[str, ...]:
@@ -48,6 +48,10 @@ def _argv(cfg: LocalConfig) -> tuple[str, ...]:
         args += ["--cert", str(cfg.cert), "--key", str(cfg.key)]
     if cfg.auth_enabled:
         args += ["--htpasswd", str(cfg.htpasswd)]
+    for user in cfg.publish_users:
+        args += ["--publish-user", user]
+    if cfg.max_upload_bytes != _DEFAULT_MAX_UPLOAD_BYTES:
+        args += ["--max-upload-bytes", str(cfg.max_upload_bytes)]
     return tuple(args)
 
 
