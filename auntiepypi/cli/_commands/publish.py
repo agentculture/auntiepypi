@@ -39,7 +39,7 @@ from auntiepypi.cli._output import emit_result
 __all__ = ["cmd_publish", "register"]
 
 
-def _resolve_creds(args: argparse.Namespace) -> tuple[str, str]:
+def _resolve_creds() -> tuple[str, str]:
     """Return ``(user, password)`` from env or prompts.
 
     Uses ``getpass`` for the password so it doesn't echo. In non-TTY
@@ -111,7 +111,7 @@ def cmd_publish(args: argparse.Namespace) -> int:
     project, version = parsed
 
     cfg = load_local_config()
-    user, password = _resolve_creds(args)
+    user, password = _resolve_creds()
 
     file_bytes = path.read_bytes()
     body, ctype = build_multipart(file_bytes, path.name, project, version)

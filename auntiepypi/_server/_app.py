@@ -50,6 +50,8 @@ from auntiepypi._server._wheelhouse import list_projects, normalize, parse_filen
 _SIMPLE_PREFIX = "/simple/"
 _FILES_PREFIX = "/files/"
 
+_TEXT_PLAIN_UTF8 = "text/plain; charset=utf-8"
+
 # Strict filename pattern: PEP 427/625 dist files + no path components.
 # Permits the same charset filenames carry on PyPI.
 _SAFE_FILENAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+-]*\.(whl|tar\.gz|zip)$")
@@ -64,7 +66,7 @@ class _UploadReadError(Exception):
         self.detail = detail
 
 
-def make_handler(
+def make_handler(  # NOSONAR python:S3776 - factory closure; see note below
     root: Path,
     *,
     htpasswd_map: dict[str, bytes] | None = None,
@@ -84,6 +86,16 @@ def make_handler(
     one can publish (read-only mode preserved with 403 "publish
     disabled"). ``max_upload_bytes`` is enforced both pre-read
     (Content-Length) and during-read (counted reader).
+
+    .. note::
+       Cognitive complexity is high (Sonar S3776) because this is a
+       closure factory: ``_Handler`` and all its helpers close over
+       ``root`` / ``htpasswd_map`` / ``publish_users`` /
+       ``max_upload_bytes``. Hoisting the methods out as module-level
+       functions would require explicit-passing of all four to every
+       call site — net cognitive cost goes up, not down. The v0.9.0
+       streaming-multipart refactor will revisit this; for v0.8.0 the
+       trade-off is deliberate.
     """
     resolved_root = root.resolve()
 
@@ -196,7 +208,7 @@ def make_handler(
         def _send_status(self, status: int) -> None:
             body = f"{status}\n".encode()
             self.send_response(status)
-            self.send_header("Content-Type", "text/plain; charset=utf-8")
+            self.send_header("Content-Type", _TEXT_PLAIN_UTF8)
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
@@ -226,7 +238,7 @@ def make_handler(
                 'Basic realm="auntiepypi", charset="UTF-8"',
             )
             self.send_header("Connection", "close")
-            self.send_header("Content-Type", "text/plain; charset=utf-8")
+            self.send_header("Content-Type", _TEXT_PLAIN_UTF8)
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
@@ -248,7 +260,7 @@ def make_handler(
             else:
                 assert text is not None  # noqa: S101 - mypy hint
                 body = f"{text}\n".encode("utf-8")
-                ctype = "text/plain; charset=utf-8"
+                ctype = _TEXT_PLAIN_UTF8
             self.send_response(status)
             self.send_header("Content-Type", ctype)
             self.send_header("Content-Length", str(len(body)))

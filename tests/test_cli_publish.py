@@ -78,18 +78,16 @@ def test_post_returns_status_and_body_on_2xx(monkeypatch):
 def test_post_maps_httperror_to_status_and_body(monkeypatch):
     import urllib.error
 
-    monkeypatch.setattr(
-        "urllib.request.urlopen",
-        lambda *a, **kw: (_ for _ in ()).throw(
-            urllib.error.HTTPError(
-                "http://127.0.0.1/",  # NOSONAR python:S5332
-                409,
-                "Conflict",
-                hdrs=None,
-                fp=BytesIO(b"file already exists"),
-            )
-        ),
-    )
+    def raise_http_409(*_a, **_kw):
+        raise urllib.error.HTTPError(
+            "http://127.0.0.1/",  # NOSONAR python:S5332
+            409,
+            "Conflict",
+            hdrs=None,
+            fp=BytesIO(b"file already exists"),
+        )
+
+    monkeypatch.setattr("urllib.request.urlopen", raise_http_409)
     status, body = post(
         "http://127.0.0.1:3141/",  # noqa: S104  # NOSONAR python:S5332
         b"x",
