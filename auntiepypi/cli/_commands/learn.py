@@ -52,6 +52,11 @@ Commands
   auntie restart [name|--all]  Restart a server (atomic for systemd-user;
                                stop+start for command and the first-party
                                server). Supports --json.
+  auntie publish <path>        Upload a wheel/sdist to the configured local
+                               index ([tool.auntiepypi.local]). Requires
+                               htpasswd + publish_users allowlist; reads
+                               $AUNTIE_PUBLISH_USER / _PASSWORD or prompts.
+                               Supports --json.
   auntie whoami                Auth/env probe — which PyPI / TestPyPI /
                                local index is the active environment
                                pointing at? Supports --json.
@@ -70,6 +75,8 @@ Configuration
     cert = "/etc/ssl/auntie.pem"          # v0.7.0: HTTPS termination
     key  = "/etc/ssl/auntie.key"          # v0.7.0: paired with cert
     htpasswd = "/etc/auntie/htpasswd"     # v0.7.0: Basic-auth, bcrypt-only
+    publish_users = ["alice"]             # v0.8.0: who can POST uploads
+    max_upload_bytes = 104857600          # v0.8.0: per-request size cap
 
   pyproject.toml [[tool.auntiepypi.servers]]   # one block per declared server
     name = "main"                         # "auntie" is reserved
@@ -152,6 +159,14 @@ def _as_json_payload() -> dict[str, object]:
                     "Restart a server. Atomic for systemd-user; stop+start for "
                     "command and the first-party server. Re-spawn uses current "
                     "pyproject config."
+                ),
+            },
+            {
+                "path": ["publish"],
+                "summary": (
+                    "Upload a wheel/sdist to the configured local index. "
+                    "Requires publish_users allowlist; reads "
+                    "$AUNTIE_PUBLISH_USER / _PASSWORD or prompts."
                 ),
             },
             {

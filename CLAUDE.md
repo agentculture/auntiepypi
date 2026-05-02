@@ -2,33 +2,42 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Status: v0.7.0 — HTTPS + basic-auth landed
+## Status: v0.8.0 — `auntie publish` (write side) landed
 
-The first-party server gains optional **HTTPS** (operator-supplied PEM
-via `[tool.auntiepypi.local].cert` / `.key`, loaded with
-`ssl.SSLContext.load_cert_chain`, TLS 1.2 floor) and **HTTP Basic auth**
-(Apache htpasswd file, bcrypt-only, via
-`[tool.auntiepypi.local].htpasswd`). Public binding (non-loopback) is
-allowed when both are configured; either alone is rejected at
-config-load time with a `missing: …` tail naming the gap. The detection
-probe switches scheme based on `cfg.tls_enabled` and treats 401 as `up`
-when `cfg.auth_enabled` (a working auth gate is a stronger liveness
-signal than an open 200; the detector deliberately doesn't read
-htpasswd).
+The first-party server gains a **twine-compatible POST upload
+endpoint** at `/`. The legacy PyPI upload protocol
+(`multipart/form-data` with `:action=file_upload`) is what twine,
+flit, and hatch all speak; the auntiepypi server speaks it too.
 
-`bcrypt>=4.0,<5` becomes the **first runtime dependency** — stdlib has
-no htpasswd-compatible verifier and rolling our own bcrypt is
-malpractice. `cryptography` is dev-only (test cert fixture).
+Authorization is a strict superset of authentication: every publisher
+must be both authenticated AND in the new `publish_users` allowlist.
+Empty / unset allowlist preserves read-only mode (POST → 403 "publish
+disabled"). Names in the allowlist must reference actual htpasswd
+entries; the cross-check fires at config-load time.
 
-`auntie publish` (write side) remains deferred — the v0.7.0 slice is
-"read-only safe to expose to the LAN," consistent with the small-
-landable-PR pattern from v0.5.0 and v0.6.0. The mesh-aware service
-registry is v1.0.0.
+`[tool.auntiepypi.local].max_upload_bytes` caps each request body
+(default 100 MiB; enforced both pre-read via `Content-Length` and
+during-read via a counted reader). Writes are atomic:
+`tempfile.NamedTemporaryFile(dir=cfg.root, prefix=".upload-", suffix=".part")`
+followed by `os.rename` on the same filesystem. Existing-target
+collisions return 409 (no overwrite, ever); yank/delete is out of
+scope (operators delete from `cfg.root` directly to retract).
 
-See `docs/superpowers/specs/2026-05-02-auntiepypi-v0.7.0-tls-auth-design.md`
-for the full design rationale; v0.6.0's read-only loopback foundation
-is documented in
-`docs/superpowers/specs/2026-05-01-auntiepypi-v0.6.0-local-server-design.md`.
+The new CLI verb is `auntie publish <path>`. Credentials come from
+`$AUNTIE_PUBLISH_USER` / `$AUNTIE_PUBLISH_PASSWORD` or interactive
+prompt; non-TTY without env vars exits 2 (no silent block). Exit
+codes: 0 on 2xx, 1 on 4xx/5xx, 2 on transport / local-file error.
+
+Multipart parsing uses stdlib `email.parser.BytesParser` (the `cgi`
+module was removed in Python 3.13). No new runtime dependency:
+`bcrypt>=4.0,<5` (added in v0.7.0) is reused for the new
+`authenticate_user` primitive that returns the username instead of a
+bool.
+
+See `docs/superpowers/specs/2026-05-03-auntiepypi-v0.8.0-publish-design.md`
+for the full design rationale; v0.7.0's TLS + auth foundation is
+documented in
+`docs/superpowers/specs/2026-05-02-auntiepypi-v0.7.0-tls-auth-design.md`.
 
 This file describes the repository **as it exists on disk today**. When
 you edit, keep claims grounded in checked-in reality; the moment a
@@ -176,6 +185,14 @@ Active verbs registered at v0.6.0:
   `command` and the first-party server, re-spawning from the
   **current** pyproject (`command` array or `[tool.auntiepypi.local]`
   respectively). Sidecar argv drift is logged but never blocks.
+- `auntie publish <path> [--json]` — upload a wheel/sdist to the
+  configured local index via the legacy PyPI POST upload protocol
+  (`multipart/form-data` with `:action=file_upload`). Reads creds from
+  `$AUNTIE_PUBLISH_USER` / `$AUNTIE_PUBLISH_PASSWORD` or interactive
+  prompt; refuses to block in non-TTY without env vars. HTTPS verify
+  is on by default; `AUNTIE_INSECURE_SKIP_VERIFY=1` disables it for
+  self-signed certs (loud stderr warning). Exit 0 on 2xx, 1 on 4xx /
+  5xx (401 / 403 / 409 / 413 / …), 2 on transport / local-file error.
 - `auntie whoami [--json]` — auth/env probe; reads `$PIP_INDEX_URL` /
   `$UV_INDEX_URL` env vars and pip's global config file. Exact paths
   inspected live in `auntiepypi/cli/_commands/whoami.py`.
@@ -241,11 +258,25 @@ burned on the `agentpypi → auntiepypi` rename. The table below uses
    dependency. Read-only invariant preserved; `auntie publish` slid
    forward to v0.8.0. See spec
    `docs/superpowers/specs/2026-05-02-auntiepypi-v0.7.0-tls-auth-design.md`.
-8. **semver 0.8.0 — `auntie publish`.** Write side of the first-party
-   index. POST upload path with the same trust model as v0.7.0 (TLS
-   - Basic auth) plus an authorization step (which users can publish).
-9. **semver 1.0.0 — mesh-aware.** Local index discoverable via Culture-mesh
-   service registry; trust boundary documented in `docs/threat-model.md`.
+8. **semver 0.8.0 — `auntie publish` (shipped).** Write side of the
+   first-party index. Twine-compatible POST upload at `/`, gated by
+   v0.7.0's TLS + auth bundle plus a `publish_users` allowlist
+   (cross-checked against htpasswd at config-load). New CLI verb
+   `auntie publish <path>`; new `[tool.auntiepypi.local].publish_users`
+   and `.max_upload_bytes` config keys. No new runtime dep —
+   `email.parser.BytesParser` parses the multipart body. See spec
+   `docs/superpowers/specs/2026-05-03-auntiepypi-v0.8.0-publish-design.md`.
+9. **semver 0.8.1 — keyring / netrc.** Credential plumbing for
+   `auntie publish`: read username/password from system keyring or a
+   netrc-format file (location resolved via `$NETRC` or stdlib
+   defaults). Reduces the `$AUNTIE_PUBLISH_*` env-var ergonomics gap.
+10. **semver 0.9.0 — streaming multipart.** Replace the v0.8.0
+    in-memory parser with a streaming variant so multi-GiB ML wheels
+    don't pay the memory cost. Same on-the-wire protocol.
+11. **semver 1.0.0 — mesh-aware.** Local index discoverable via
+    Culture-mesh service registry; trust boundary documented in
+    `docs/threat-model.md`. Per-package ownership maps
+    (`{"alice": ["mypkg-*"]}`) likely land here too.
 
 This roadmap is descriptive of intent, not a commitment. Reorder or
 replace as the design lands.

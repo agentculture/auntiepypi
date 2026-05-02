@@ -1,6 +1,6 @@
 [project]
 name = "auntiepypi"
-version = "0.7.0"
+version = "0.8.0"
 description = "auntiepypi — both ends of the Python distribution pipe for the AgentCulture mesh."
 readme = "README.md"
 license = "MIT"

@@ -5,6 +5,38 @@ All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] - 2026-05-03
+
+### Added
+
+- `auntie publish <path>` — new CLI verb that uploads wheels and sdists to the configured first-party local index. Reads credentials from `$AUNTIE_PUBLISH_USER` / `$AUNTIE_PUBLISH_PASSWORD` or interactive prompt; refuses to block in non-TTY environments. Exit codes: 0 on 2xx, 1 on 4xx/5xx, 2 on transport error.
+- Twine-compatible POST upload endpoint at `/`. The first-party server now accepts the legacy PyPI upload protocol (`multipart/form-data` with `:action=file_upload`); twine, flit, hatch all work unchanged. Authorization requires both authentication AND membership in the new `publish_users` allowlist.
+- `[tool.auntiepypi.local].publish_users` — list of htpasswd usernames permitted to POST uploads. Empty / unset preserves read-only mode (POST returns 403 "publish disabled"). `publish_users` set without `htpasswd` is rejected at config-load time. Each name must reference an actual htpasswd entry; the cross-check fires before the server starts.
+- `[tool.auntiepypi.local].max_upload_bytes` — per-request body cap, default 100 MiB. Enforced both pre-read (Content-Length) and during-read (counted reader). Operators with multi-GiB ML wheels override.
+- `_server/_multipart.py` — twine-shape multipart parser using stdlib `email.parser.BytesParser`. Consumes `:action`, `name`, and `content` (with filename); silently ignores the ~17 other metadata fields PyPI clients send.
+- `_server/_publish.py` — atomic upload writer. `tempfile.NamedTemporaryFile(dir=root, prefix=".upload-", suffix=".part")` keeps the rename on the same filesystem (atomic on POSIX). Existing-target collision returns 409 (no overwrite, ever); ENOSPC / EROFS / EACCES return 500 with cleanup; the finally-block unlinks the temp on every error path so partial uploads never litter `cfg.root`.
+- `_server/_auth.authenticate_user(header, map) -> str | None` — new primitive that returns the authenticated username (publish authz needs to know *which* user uploaded). `verify_basic` becomes a thin bool adapter; existing v0.7.0 read-side callers (`do_GET`) are unchanged.
+- `cli/_commands/_publish_client.py` — stdlib HTTP client. `build_multipart` assembles the request body; `post` wraps `urllib.request` with `Authorization: Basic …`, captures `HTTPError` as `(status, body)`, propagates `URLError` for transport failures.
+
+### Changed
+
+- `make_handler` widens with two new kwargs: `publish_users: tuple[str, ...] = ()` and `max_upload_bytes: int = _DEFAULT_MAX_UPLOAD_BYTES`. v0.7.0 callers (no kwargs) get the same behaviour.
+- `serve()` and `python -m auntiepypi._server` gain `--publish-user NAME` (repeatable) and `--max-upload-bytes N`. `_actions/auntie._argv()` appends them conditionally so v0.7.0 pyprojects produce the exact same argv.
+- `auntie explain auntiepypi` and `auntie learn` document the new verb plus the two new `[tool.auntiepypi.local]` keys.
+
+### Threat model expansion
+
+- Read surface unchanged: "single-host LAN with auth + TLS."
+- Write surface: "single-host LAN with auth + TLS + per-user authz." Every publisher must be both authenticated AND in `publish_users`. POST `/` returns 405 when auth is not configured (operator opted into read-only); 401 / 403 / 404 / 400 / 413 / 409 / 201 by failure mode otherwise.
+
+### Compat notes
+
+- `LocalConfig` adds two optional fields with sane defaults; v0.7.0 default tables still parse identically.
+- `do_POST` is a real verb now. v0.7.0 servers without `publish_users` configured still answer it (with 403 "publish disabled"), where v0.7.0 returned 501. The behaviour-sealed-by-default property holds: read-only mode requires no operator opt-in.
+- The `cgi` stdlib module is removed in Python 3.13. `_multipart.py` uses `email.parser.BytesParser` instead — no third-party dep.
+
+### Fixed
+
 ## [0.7.0] - 2026-05-02
 
 ### Added

@@ -27,7 +27,7 @@ from auntiepypi._actions._action import ActionResult
 from auntiepypi._actions._reprobe import probe
 from auntiepypi._detect._config import ServerSpec, load_local_config
 from auntiepypi._detect._detection import Detection
-from auntiepypi._server._config import LocalConfig
+from auntiepypi._server._config import _DEFAULT_MAX_UPLOAD_BYTES, LocalConfig
 
 
 def _argv(cfg: LocalConfig) -> tuple[str, ...]:
@@ -48,6 +48,10 @@ def _argv(cfg: LocalConfig) -> tuple[str, ...]:
         args += ["--cert", str(cfg.cert), "--key", str(cfg.key)]
     if cfg.auth_enabled:
         args += ["--htpasswd", str(cfg.htpasswd)]
+    for user in cfg.publish_users:
+        args += ["--publish-user", user]
+    if cfg.max_upload_bytes != _DEFAULT_MAX_UPLOAD_BYTES:
+        args += ["--max-upload-bytes", str(cfg.max_upload_bytes)]
     return tuple(args)
 
 
@@ -67,13 +71,22 @@ def _check_readable(path: Path, label: str) -> str | None:
 
 
 def _verify_tls_auth_paths(cfg: LocalConfig) -> ActionResult | None:
-    """Pre-flight readability check on configured cert/key/htpasswd.
+    """Pre-flight readability + publish-authz check.
 
-    Returns None when all configured paths are readable; otherwise
-    an ActionResult(ok=False) with a clear detail. Surfacing the miss
-    as a strategy-level failure (instead of a raise) preserves
-    `--all`'s independent-dispatch semantics — a broken local server
-    config doesn't strand the operator's declared mirrors.
+    Three checks, server-start time only (never reached via detection):
+
+    1. TLS pair readable (when ``cfg.tls_enabled``).
+    2. htpasswd readable (when ``cfg.auth_enabled``).
+    3. Every ``cfg.publish_users`` name has an htpasswd entry. This
+       last check **must** live here, not in
+       :mod:`auntiepypi._detect._config`: detection paths must never
+       read credential files.
+
+    Returns None when all checks pass; otherwise an
+    ``ActionResult(ok=False)`` with a clear detail. Surfacing as a
+    strategy-level failure (instead of a raise) preserves ``--all``'s
+    independent-dispatch semantics — a broken local server config
+    doesn't strand the operator's declared mirrors.
     """
     if cfg.tls_enabled:
         # tls_enabled is True only when both cert and key are set.
@@ -87,6 +100,19 @@ def _verify_tls_auth_paths(cfg: LocalConfig) -> ActionResult | None:
         err = _check_readable(cfg.htpasswd, "htpasswd")
         if err is not None:
             return ActionResult(ok=False, detail=err)
+    # Publish-users membership: htpasswd is read here, in the
+    # server-start path, never in detection. Delayed import avoids the
+    # _detect → _server hop entirely.
+    if cfg.publish_users:
+        from auntiepypi._server._auth import (
+            PublishAuthzError,
+            assert_publish_users_in_htpasswd,
+        )
+
+        try:
+            assert_publish_users_in_htpasswd(cfg.htpasswd, cfg.publish_users)
+        except PublishAuthzError as err:
+            return ActionResult(ok=False, detail=str(err))
     return None
 
 

@@ -21,6 +21,7 @@ from auntiepypi.cli._commands import down as _down_cmd
 from auntiepypi.cli._commands import explain as _explain_cmd
 from auntiepypi.cli._commands import learn as _learn_cmd
 from auntiepypi.cli._commands import overview as _overview_cmd
+from auntiepypi.cli._commands import publish as _publish_cmd
 from auntiepypi.cli._commands import restart as _restart_cmd
 from auntiepypi.cli._commands import up as _up_cmd
 from auntiepypi.cli._commands import whoami as _whoami_cmd
@@ -61,6 +62,7 @@ def _build_parser() -> argparse.ArgumentParser:
     _up_cmd.register(sub)
     _down_cmd.register(sub)
     _restart_cmd.register(sub)
+    _publish_cmd.register(sub)
     _whoami_cmd.register(sub)
 
     return parser

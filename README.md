@@ -6,13 +6,15 @@
 > running locally, and starts/stops/restarts declared servers —
 > informational first, actionable on demand.
 
-**Status:** v0.7.0 — HTTPS + basic-auth landed. The first-party server
-now supports optional TLS termination (operator-supplied PEM via
-`[tool.auntiepypi.local].cert` / `.key`, TLS 1.2 floor) and HTTP Basic
-auth (Apache htpasswd file, bcrypt-only, via
-`[tool.auntiepypi.local].htpasswd`). Public binding (non-loopback) is
-allowed when both are configured; either alone is rejected at
-config-load time. `bcrypt>=4.0,<5` is the first runtime dependency.
+**Status:** v0.8.0 — `auntie publish` (write side) landed. The
+first-party server now accepts twine-compatible POST uploads at `/`
+(legacy PyPI upload protocol — `multipart/form-data` with
+`:action=file_upload`). Authorization is gated by both v0.7.0 auth
+AND a new `publish_users` allowlist; empty allowlist preserves
+read-only mode. New CLI verb `auntie publish <path>` reads creds from
+`$AUNTIE_PUBLISH_USER` / `$AUNTIE_PUBLISH_PASSWORD` or interactive
+prompt. Per-request body cap via `[tool.auntiepypi.local].max_upload_bytes`
+(default 100 MiB). No new runtime dep.
 
 Bare `auntie up` / `auntie down` / `auntie restart` (introduced in
 v0.6.0) continue to start, stop, and restart auntie's own simple-index
@@ -21,8 +23,7 @@ server. Wheels in `$XDG_DATA_HOME/auntiepypi/wheels/` are served from
 configured) and installable via `pip install --index-url`. Lifecycle
 verbs continue to work against declared servers (`managed_by ∈
 {systemd-user, command}`); `--all` aggregates the first-party server
-with every supervised declaration. `auntie publish` (write side) is
-deferred to v0.8.0.
+with every supervised declaration.
 
 ## Quick start
 
@@ -38,6 +39,9 @@ auntie up <name>                    # start one declared server
 auntie up --all                     # first-party server + every supervised declaration
 auntie down                         # stop the first-party server
 auntie restart <name>               # atomic for systemd-user; stop+start for command
+AUNTIE_PUBLISH_USER=alice \
+AUNTIE_PUBLISH_PASSWORD=secret \
+  auntie publish dist/mypkg-1.0.whl  # upload via twine-compatible POST (v0.8.0)
 ```
 
 Example servers-section output (one declared server):
@@ -74,12 +78,37 @@ unit = "pypi-server.service"
 # v0.7.0: HTTPS + Basic auth on the first-party server.
 # Loopback host (127.0.0.1, ::1, localhost) is always allowed.
 # Non-loopback host requires BOTH cert+key AND htpasswd.
+# v0.8.0: publish_users gates the POST upload endpoint; empty list
+# preserves read-only mode. max_upload_bytes caps per-request body.
 [tool.auntiepypi.local]
 host = "0.0.0.0"
 cert = "/etc/ssl/private/auntie.pem"
 key  = "/etc/ssl/private/auntie.key"
 htpasswd = "/etc/auntie/htpasswd"      # bcrypt-only; populate via `htpasswd -B`
+publish_users = ["alice", "bob"]       # v0.8.0: who can POST uploads
+max_upload_bytes = 104857600           # v0.8.0: 100 MiB default
 ```
+
+### Publishing a wheel (v0.8.0)
+
+```bash
+# Operator: configure auth + publish_users (above), then start the server.
+auntie up
+
+# Publisher: build a wheel and upload via auntie's CLI.
+uv build
+AUNTIE_PUBLISH_USER=alice AUNTIE_PUBLISH_PASSWORD=secret \
+  auntie publish dist/mypkg-1.0-py3-none-any.whl
+# expect: "published mypkg-1.0-py3-none-any.whl → /files/..."
+
+# Or via twine — the server speaks the legacy PyPI upload protocol.
+TWINE_USERNAME=alice TWINE_PASSWORD=secret \
+  twine upload --repository-url https://0.0.0.0:3141/ dist/*.whl
+```
+
+Self-signed certs need `AUNTIE_INSECURE_SKIP_VERIFY=1` (loud stderr
+warning fires on each invocation). Existing-file uploads return 409
+(no overwrite, ever — pick a new version).
 
 > **pip + Basic auth note.** `pip install --index-url
 > https://user:pass@host:port/simple/` works but embeds creds in URL,

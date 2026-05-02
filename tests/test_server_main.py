@@ -71,23 +71,8 @@ def test_parser_tls_auth_flags_pass_through(tmp_path: Path):
 def test_main_calls_serve(monkeypatch, tmp_path):
     captured: dict[str, object] = {}
 
-    def fake_serve(
-        host: str,
-        port: int,
-        root: Path,
-        *,
-        ssl_context=None,
-        htpasswd_map=None,
-    ) -> None:
-        captured.update(
-            {
-                "host": host,
-                "port": port,
-                "root": root,
-                "ssl_context": ssl_context,
-                "htpasswd_map": htpasswd_map,
-            }
-        )
+    def fake_serve(host: str, port: int, root: Path, **kw) -> None:  # noqa: ANN003
+        captured.update({"host": host, "port": port, "root": root, **kw})
 
     monkeypatch.setattr(server_main, "serve", fake_serve)
     server_main.main(["--host", "127.0.0.1", "--port", "9999", "--root", str(tmp_path)])
@@ -96,6 +81,9 @@ def test_main_calls_serve(monkeypatch, tmp_path):
     assert captured["root"] == tmp_path
     assert captured["ssl_context"] is None
     assert captured["htpasswd_map"] is None
+    # v0.8.0 defaults: empty allowlist + 100 MiB cap
+    assert captured["publish_users"] == ()
+    assert captured["max_upload_bytes"] == 100 * 1024 * 1024
 
 
 def test_main_rejects_cert_without_key(tmp_path: Path):
@@ -114,8 +102,8 @@ def test_main_builds_ssl_context_when_pair_set(monkeypatch, tmp_path, tls_cert_p
     cert, key = tls_cert_pair
     captured: dict[str, object] = {}
 
-    def fake_serve(host, port, root, *, ssl_context=None, htpasswd_map=None):  # noqa: ANN001
-        captured["ssl_context"] = ssl_context
+    def fake_serve(host, port, root, **kw):  # noqa: ANN001
+        captured["ssl_context"] = kw.get("ssl_context")
 
     monkeypatch.setattr(server_main, "serve", fake_serve)
     server_main.main(
@@ -147,13 +135,75 @@ def test_main_parses_htpasswd_when_set(monkeypatch, tmp_path):
 
     captured: dict[str, object] = {}
 
-    def fake_serve(host, port, root, *, ssl_context=None, htpasswd_map=None):  # noqa: ANN001
-        captured["htpasswd_map"] = htpasswd_map
+    def fake_serve(host, port, root, **kw):  # noqa: ANN001
+        captured["htpasswd_map"] = kw.get("htpasswd_map")
 
     monkeypatch.setattr(server_main, "serve", fake_serve)
     server_main.main(["--root", str(tmp_path), "--htpasswd", str(htp)])
     assert isinstance(captured["htpasswd_map"], dict)
     assert "alice" in captured["htpasswd_map"]
+
+
+# --------- v0.8.0 publish flags ---------
+
+
+def test_parser_publish_user_repeatable():
+    args = server_main._parser().parse_args(
+        [
+            "--root",
+            "/tmp/wh",  # noqa: S108  # NOSONAR python:S5443
+            "--publish-user",
+            "alice",
+            "--publish-user",
+            "bob",
+        ]
+    )
+    assert args.publish_user == ["alice", "bob"]
+
+
+def test_parser_publish_user_default_is_empty_list():
+    args = server_main._parser().parse_args(
+        ["--root", "/tmp/wh"]  # noqa: S108  # NOSONAR python:S5443
+    )
+    assert args.publish_user == []
+
+
+def test_parser_max_upload_bytes_default():
+    args = server_main._parser().parse_args(
+        ["--root", "/tmp/wh"]  # noqa: S108  # NOSONAR python:S5443
+    )
+    assert args.max_upload_bytes == 100 * 1024 * 1024
+
+
+def test_parser_max_upload_bytes_override():
+    fixture_root = "/tmp/wh"  # noqa: S108  # NOSONAR python:S5443
+    args = server_main._parser().parse_args(
+        ["--root", fixture_root, "--max-upload-bytes", "536870912"]
+    )
+    assert args.max_upload_bytes == 536870912
+
+
+def test_main_passes_publish_users_and_max_upload_bytes(monkeypatch, tmp_path):
+    captured: dict[str, object] = {}
+
+    def fake_serve(host, port, root, **kw):  # noqa: ANN001, ANN003
+        captured.update(kw)
+
+    monkeypatch.setattr(server_main, "serve", fake_serve)
+    server_main.main(
+        [
+            "--root",
+            str(tmp_path),
+            "--publish-user",
+            "alice",
+            "--publish-user",
+            "bob",
+            "--max-upload-bytes",
+            "12345",
+        ]
+    )
+    assert captured["publish_users"] == ("alice", "bob")
+    assert captured["max_upload_bytes"] == 12345
 
 
 # --------- serve() integration ---------
