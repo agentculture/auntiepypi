@@ -110,14 +110,20 @@ def insecure_skip_verify_enabled() -> bool:
 def _build_client_ssl_context(url: str, *, verify: bool) -> ssl.SSLContext | None:
     """Pick an SSL context for the upload POST.
 
-    HTTPS + verify=True → CA-verifying default context.
+    HTTPS + verify=True → CA-verifying default context with TLS 1.2
+    floor (matches the server-side pin in
+    :mod:`auntiepypi._server._tls`).
     HTTPS + verify=False → unverified context (operator opt-in via
-    AUNTIE_INSECURE_SKIP_VERIFY=1 only). HTTP → None.
+    ``AUNTIE_INSECURE_SKIP_VERIFY=1`` only). HTTP → None.
     """
     if not url.startswith("https://"):
         return None
     if verify:
-        return ssl.create_default_context()
+        ctx = ssl.create_default_context()
+        # Pin TLS 1.2 floor explicitly so older protocols stay out of
+        # band even on operating systems with permissive defaults.
+        ctx.minimum_version = ssl.TLSVersion.TLSv1_2
+        return ctx
     return ssl._create_unverified_context()  # noqa: S323  # nosec B323  # NOSONAR python:S4830
 
 

@@ -557,7 +557,10 @@ def test_load_local_config_loads_publish_users(tmp_path, monkeypatch):
     # Real bcrypt entries — the validator parses the file.
     import bcrypt
 
-    h = bcrypt.hashpw(b"pw", bcrypt.gensalt(rounds=4))  # noqa: S106
+    h = bcrypt.hashpw(  # NOSONAR python:S5344 - test fixture; production cost ≥ 12
+        b"pw",  # noqa: S106  # NOSONAR python:S6437,python:S2068 - test fixture
+        bcrypt.gensalt(rounds=4),  # NOSONAR python:S5344
+    )
     htp.write_bytes(b"alice:" + h + b"\nbob:" + h + b"\n")
     _write_pyproject(
         tmp_path,
@@ -637,7 +640,10 @@ def test_load_local_config_does_not_read_htpasswd(tmp_path, monkeypatch):
     htp = tmp_path / "htpasswd"
     import bcrypt
 
-    h = bcrypt.hashpw(b"pw", bcrypt.gensalt(rounds=4))  # noqa: S106
+    h = bcrypt.hashpw(  # NOSONAR python:S5344 - test fixture; production cost ≥ 12
+        b"pw",  # noqa: S106  # NOSONAR python:S6437,python:S2068 - test fixture
+        bcrypt.gensalt(rounds=4),  # NOSONAR python:S5344
+    )
     htp.write_bytes(b"alice:" + h + b"\n")
     _write_pyproject(
         tmp_path,
@@ -712,7 +718,10 @@ def test_load_local_config_publish_users_empty_list_is_read_only(tmp_path, monke
     htp = tmp_path / "htpasswd"
     import bcrypt
 
-    h = bcrypt.hashpw(b"pw", bcrypt.gensalt(rounds=4))  # noqa: S106
+    h = bcrypt.hashpw(  # NOSONAR python:S5344 - test fixture; production cost ≥ 12
+        b"pw",  # noqa: S106  # NOSONAR python:S6437,python:S2068 - test fixture
+        bcrypt.gensalt(rounds=4),  # NOSONAR python:S5344
+    )
     htp.write_bytes(b"alice:" + h + b"\n")
     _write_pyproject(
         tmp_path,

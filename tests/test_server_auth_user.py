@@ -165,7 +165,10 @@ def _write_htpasswd(path, users):
     """Write a tiny bcrypt-hashed htpasswd with the given user list."""
     lines = []
     for user in users:
-        h = bcrypt.hashpw(b"pw", bcrypt.gensalt(rounds=4))  # noqa: S106
+        h = bcrypt.hashpw(  # NOSONAR python:S5344 - test fixture; production cost ≥ 12
+            b"pw",  # noqa: S106  # NOSONAR python:S6437,python:S2068 - test fixture
+            bcrypt.gensalt(rounds=4),  # NOSONAR python:S5344
+        )
         lines.append(user.encode() + b":" + h)
     path.write_bytes(b"\n".join(lines) + b"\n")
 
