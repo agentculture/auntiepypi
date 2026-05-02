@@ -50,8 +50,10 @@ Five things:
    the configured first-party index using the legacy PyPI POST upload
    protocol (twine-compatible). Authorization is a strict superset of
    authentication: every publisher must be both authenticated AND in
-   the `publish_users` allowlist. Empty / unset allowlist preserves
-   read-only mode (POST → 403 "publish disabled").
+   the `publish_users` allowlist. With no `htpasswd` configured, the
+   server is read-only (POST → 405). With auth configured but
+   `publish_users` empty, authenticated POSTs return 403
+   "publish disabled" — read-only mode is preserved either way.
 
 The same machinery feeds the top-level `auntie overview`, which
 composes the packages dashboard with a `servers` section that surfaces

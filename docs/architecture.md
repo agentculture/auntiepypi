@@ -2,10 +2,12 @@
 
 `auntiepypi` is a CLI plus a local HTTP server. The CLI inspects PyPI
 and your local machine; the server hosts a private PEP 503 simple
-index. State lives in two places — `pyproject.toml` (declared
-inventory + first-party server config) and the wheelhouse directory
-(`$XDG_DATA_HOME/auntiepypi/wheels/` by default). There is no hidden
-global state.
+index. The two declarative state surfaces are `pyproject.toml`
+(declared inventory + first-party server config) and the wheelhouse
+directory (`$XDG_DATA_HOME/auntiepypi/wheels/` by default). The
+runtime layer adds PID-file sidecars (`_actions/command.py`) and
+numbered `.bak` snapshots written before any `pyproject.toml` edit —
+both auditable and rollback-safe. There is no hidden global state.
 
 ## Bird's-eye view
 
@@ -65,8 +67,10 @@ distribution files. `_auth.py` parses htpasswd (bcrypt-only) and
 verifies HTTP Basic. `_tls.py` builds the `ssl.SSLContext`.
 `_multipart.py` parses twine-shape upload bodies via stdlib
 `email.parser.BytesParser`. `_publish.py` writes uploads atomically
-via `tempfile.NamedTemporaryFile + os.rename`. `_config.py` is the
-frozen `LocalConfig` dataclass.
+via `tempfile.NamedTemporaryFile` + `os.link` (no-clobber on POSIX;
+`FileExistsError` → 409 with no TOCTOU window — see
+[`security.md`](security.md) for the rationale). `_config.py` is
+the frozen `LocalConfig` dataclass.
 
 ## Where state lives
 

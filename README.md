@@ -11,10 +11,11 @@
 
 A small CLI plus a stable plumbing layer that an agent inside the
 AgentCulture mesh can call. Read verbs (`overview`, `learn`,
-`explain`, `whoami`) never touch disk or bind ports. Mutation verbs
-(`doctor --apply`, `up`, `down`, `restart`, `publish`) do exactly one
-thing each, and every dangerous surface (public binding, POST upload,
-config edits) requires explicit operator opt-in. The first-party
+`explain`, `whoami`, `doctor` without `--apply`) read configuration
+and probe state but never write to disk or bind a port. Mutation
+verbs (`doctor --apply`, `up`, `down`, `restart`, `publish`) do
+exactly one thing each, and every dangerous surface (public binding,
+POST upload, config edits) requires explicit operator opt-in. The first-party
 server runs on loopback by default and stays read-only until
 `publish_users` is set. See [`docs/architecture.md`](docs/architecture.md)
 for the module map and [`docs/security.md`](docs/security.md) for the
@@ -29,7 +30,7 @@ threat model.
 | v0.3.0  | `auntie overview` server detection (`_detect/`)  | nothing           | shipped  |
 | v0.4.0  | `auntie doctor` lifecycle (`--apply`)            | `pyproject.toml`  | shipped  |
 | v0.5.0  | `auntie up` / `down` / `restart` (declared)      | process state     | shipped  |
-| v0.6.0  | First-party PEP 503 simple-index (read-only)     | wheelhouse (read) | shipped  |
+| v0.6.0  | First-party PEP 503 simple-index (read-only)     | nothing           | shipped  |
 | v0.7.0  | HTTPS + Basic auth on the first-party server     | nothing           | shipped  |
 | v0.8.0  | `auntie publish` — twine-compatible POST upload  | package index     | shipped  |
 | v0.8.x  | Keyring / netrc credential plumbing              | nothing           | planned  |

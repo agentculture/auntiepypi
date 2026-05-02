@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.8.1] - 2026-05-02
+## [0.8.1] - 2026-05-03
 
 ### Added
 
@@ -14,7 +14,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
-- docs/about.md — refreshed "What it does today" through v0.8.0 (overview, doctor, lifecycle, first-party server, TLS+auth, publish) and rewrote "Where its headed" to track the v0.8.x / v0.9.0 / v1.0.0 roadmap.
+- docs/about.md — refreshed "What it does today" through v0.8.0 (overview, doctor, lifecycle, first-party server, TLS+auth, publish) and rewrote "Where it's headed" to track the v0.8.x / v0.9.0 / v1.0.0 roadmap.
 
 ## [0.8.0] - 2026-05-03
 

@@ -16,8 +16,11 @@ and
 - Default bind is `127.0.0.1:3141` (loopback). No remote host can
   connect without explicit reconfiguration.
 - No auth required for loopback. Plausible single-user setup.
-- `publish_users` is empty by default. The POST upload endpoint
-  returns 403 "publish disabled" until an operator names at least one
+- `publish_users` is empty by default. With no `htpasswd`
+  configured, POST is disabled at the protocol level (405 Method Not
+  Allowed). With `htpasswd` configured but `publish_users` empty,
+  authenticated POSTs return 403 "publish disabled" — read-only mode
+  is preserved either way until an operator names at least one
   publisher.
 - Existing files in the wheelhouse are never overwritten. A POST that
   would clobber an existing distribution returns 409 Conflict; the
@@ -67,10 +70,14 @@ cap is enforced **twice**:
 - During-read via a counted reader — a lying `Content-Length` cannot
   push past the cap. Truncated bodies surface as 400.
 
-Writes are atomic. `_server/_publish.py` opens
+Writes are atomic and no-clobber. `_server/_publish.py` opens
 `tempfile.NamedTemporaryFile(dir=root, prefix=".upload-",
-suffix=".part")` so the rename stays on the same filesystem (atomic
-on POSIX), then `os.rename`s the temp into place. Errors during
+suffix=".part")` (same filesystem so the link is atomic), fsyncs,
+then commits via `os.link(tmp, target)` — which fails with
+`FileExistsError` if the target already exists. `os.link` is the
+no-clobber primitive on POSIX; using `os.rename` would have left a
+TOCTOU window in which a competing writer could materialise the
+target between an existence check and the rename. Errors during
 write unlink the temp; partial uploads never litter the wheelhouse.
 
 ## Basic auth caveat (pip URL-embedded credentials)
