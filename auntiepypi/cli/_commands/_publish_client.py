@@ -37,7 +37,11 @@ __all__ = ["build_multipart", "post", "insecure_skip_verify_enabled"]
 
 
 def _new_boundary() -> str:
-    """Random boundary: 16 hex chars on a stable prefix."""
+    """Random boundary: 32 hex chars (16 random bytes) on a stable prefix.
+
+    ``secrets.token_hex(16)`` returns a 32-char hex string. Collision
+    probability with the file payload is ~2^-128.
+    """
     return f"----auntie-{secrets.token_hex(16)}"
 
 
@@ -88,9 +92,19 @@ def build_multipart(
     return body, ctype
 
 
+_TRUTHY_ENV = frozenset({"1", "true", "yes", "on"})
+
+
 def insecure_skip_verify_enabled() -> bool:
-    """True iff ``AUNTIE_INSECURE_SKIP_VERIFY`` is set to a truthy value."""
-    return os.environ.get("AUNTIE_INSECURE_SKIP_VERIFY", "") not in ("", "0", "false", "False")
+    """True iff ``AUNTIE_INSECURE_SKIP_VERIFY`` is a truthy value.
+
+    Case-insensitive: ``1`` / ``true`` / ``yes`` / ``on`` (any case)
+    enable the bypass; everything else (including unset, empty,
+    ``0``, ``false``, ``no``, ``off``, ``FALSE``) leaves verification
+    on. Allowlist semantics — defaulting to "on" for a security knob
+    is the safer side when the env value is ambiguous (e.g. typos).
+    """
+    return os.environ.get("AUNTIE_INSECURE_SKIP_VERIFY", "").strip().lower() in _TRUTHY_ENV
 
 
 def _build_client_ssl_context(url: str, *, verify: bool) -> ssl.SSLContext | None:

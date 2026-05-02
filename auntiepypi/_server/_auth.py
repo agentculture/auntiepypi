@@ -46,10 +46,48 @@ import bcrypt
 
 __all__ = [
     "HtpasswdError",
+    "PublishAuthzError",
+    "assert_publish_users_in_htpasswd",
     "authenticate_user",
     "parse_htpasswd",
     "verify_basic",
 ]
+
+
+class PublishAuthzError(Exception):
+    """``publish_users`` references a name not in the htpasswd file."""
+
+
+def assert_publish_users_in_htpasswd(htpasswd: Path | None, publish_users: tuple[str, ...]) -> None:
+    """Verify every ``publish_users`` name has a real htpasswd entry.
+
+    Called at **server-start** time (not detection time) — typos and
+    stale rotations surface before the listener binds. No-ops when
+    either field is empty / unset.
+
+    The credential file IS read here, deliberately: this is server
+    code, not a probe. Detection paths
+    (:mod:`auntiepypi._detect._local`, ``_declared``, ``_port``,
+    ``_proc``) MUST NOT call this — that would re-introduce the
+    "probe parses htpasswd" anti-pattern that v0.7.0 / v0.8.0 are
+    careful to avoid.
+    """
+    if not publish_users or htpasswd is None:
+        return
+    try:
+        table = parse_htpasswd(htpasswd)
+    except (OSError, HtpasswdError):
+        # Caller's readability check (e.g. _verify_tls_auth_paths)
+        # will surface a clearer error; don't double-report.
+        return
+    missing = [name for name in publish_users if name not in table]
+    if missing:
+        raise PublishAuthzError(
+            f"[tool.auntiepypi.local] publish_users contains name(s) not in "
+            f"{htpasswd}: {missing}. Either remove from publish_users or re-add "
+            "to htpasswd."
+        )
+
 
 _BCRYPT_PREFIXES = (b"$2y$", b"$2b$", b"$2a$")
 _BASIC_PREFIX = "Basic "

@@ -55,6 +55,15 @@ _FILES_PREFIX = "/files/"
 _SAFE_FILENAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+-]*\.(whl|tar\.gz|zip)$")
 
 
+class _UploadReadError(Exception):
+    """Body-read failure during POST. Carries an HTTP status hint."""
+
+    def __init__(self, status: int, detail: str, *args: object) -> None:
+        super().__init__(detail, status, *args)
+        self.status = status
+        self.detail = detail
+
+
 def make_handler(
     root: Path,
     *,
@@ -222,19 +231,28 @@ def make_handler(
             self.end_headers()
             self.wfile.write(body)
 
-        def _send_text(self, status: int, text: str) -> None:
-            body = f"{text}\n".encode("utf-8")
-            self.send_response(status)
-            self.send_header("Content-Type", "text/plain; charset=utf-8")
-            self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
+        def _send_post_response(
+            self, status: int, *, text: str | None = None, payload: dict | None = None
+        ) -> None:
+            """Single-shot POST response emitter.
 
-        def _send_json(self, status: int, payload: dict) -> None:
-            body = _json.dumps(payload).encode("utf-8")
+            Always sends ``Connection: close``: the upload body might
+            be partially-read or oversized, and HTTP/1.1 keep-alive
+            with leftover bytes leads to request desync. Closing the
+            socket is cheap (uploads are infrequent) and safer.
+            """
+            assert (text is None) != (payload is None)  # noqa: S101 - one-of contract
+            if payload is not None:
+                body = _json.dumps(payload).encode("utf-8")
+                ctype = "application/json"
+            else:
+                assert text is not None  # noqa: S101 - mypy hint
+                body = f"{text}\n".encode("utf-8")
+                ctype = "text/plain; charset=utf-8"
             self.send_response(status)
-            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Type", ctype)
             self.send_header("Content-Length", str(len(body)))
+            self.send_header("Connection", "close")
             self.end_headers()
             self.wfile.write(body)
 
@@ -247,73 +265,133 @@ def make_handler(
             405. Caller must authenticate AND be in publish_users —
             otherwise 401 / 403. Path must be exactly ``/`` — anything
             else is 404 (we don't leak alternate routes via 405).
+
+            Every response sends ``Connection: close`` (see
+            :meth:`_send_post_response`); upload bodies don't benefit
+            from keep-alive, and leftover unread bytes on a kept-alive
+            socket lead to request desync.
             """
             if htpasswd_map is None:
-                return self._send_text(405, "405 Method Not Allowed")
+                return self._send_post_response(405, text="405 Method Not Allowed")
             user = authenticate_user(self.headers.get("Authorization", ""), htpasswd_map)
             if user is None:
+                # _send_401 already includes Connection: close.
                 return self._send_401()
             if not publish_users:
-                return self._send_text(403, "publish disabled")
+                return self._send_post_response(403, text="publish disabled")
             if user not in publish_users:
-                return self._send_text(403, f"user {user!r} cannot publish")
+                return self._send_post_response(403, text=f"user {user!r} cannot publish")
             if self.path != "/":
-                return self._send_text(404, "404 Not Found")
+                return self._send_post_response(404, text="404 Not Found")
             return self._handle_upload()
 
         def _handle_upload(self) -> None:
             ctype = self.headers.get("Content-Type", "")
             if not ctype.lower().startswith("multipart/form-data"):
-                return self._send_text(400, "expected Content-Type: multipart/form-data")
-            length = self._content_length_or_zero()
+                return self._send_post_response(
+                    400, text="expected Content-Type: multipart/form-data"
+                )
+            length = self._content_length_strict()
+            if length is None:
+                # No / invalid Content-Length: refuse rather than
+                # read-until-EOF (which would block keep-alive).
+                return self._send_post_response(411, text="Content-Length required for upload")
             if length > max_upload_bytes:
-                return self._send_text(413, f"upload too large (max {max_upload_bytes} bytes)")
-            # Counted read defends against missing/lying Content-Length:
-            # we never read more than the cap regardless of what the
-            # client claims.
+                return self._send_post_response(
+                    413, text=f"upload too large (max {max_upload_bytes} bytes)"
+                )
             try:
-                body = self.rfile.read(min(length, max_upload_bytes)) if length else b""
-            except OSError as err:
-                return self._send_text(400, f"read error: {err}")
-            if length and len(body) != length:
-                return self._send_text(400, "incomplete body (Content-Length mismatch)")
+                body = self._read_body(length)
+            except _UploadReadError as err:
+                return self._send_post_response(err.status, text=err.detail)
             try:
                 fields = parse_multipart_upload(ctype, body, max_upload_bytes)
             except MultipartError as err:
-                return self._send_text(400, str(err))
+                return self._send_post_response(400, text=str(err))
             if fields.action != "file_upload":
-                return self._send_text(400, f"expected :action=file_upload, got {fields.action!r}")
+                return self._send_post_response(
+                    400, text=f"expected :action=file_upload, got {fields.action!r}"
+                )
             if not _SAFE_FILENAME.match(fields.filename):
-                return self._send_text(400, f"invalid filename: {fields.filename!r}")
+                return self._send_post_response(400, text=f"invalid filename: {fields.filename!r}")
             parsed = parse_filename(fields.filename)
             if parsed is None:
-                return self._send_text(
-                    400, f"unrecognized distribution filename: {fields.filename!r}"
+                return self._send_post_response(
+                    400, text=f"unrecognized distribution filename: {fields.filename!r}"
                 )
             project, _version = parsed
             if normalize(fields.name) != normalize(project):
-                return self._send_text(
+                return self._send_post_response(
                     400,
-                    f"name field {fields.name!r} does not match filename " f"project {project!r}",
+                    text=(
+                        f"name field {fields.name!r} does not match filename "
+                        f"project {project!r}"
+                    ),
                 )
             result = write_upload(resolved_root, fields.filename, fields.content)
             if result.status == 201:
-                return self._send_json(
+                return self._send_post_response(
                     201,
-                    {
+                    payload={
                         "ok": True,
                         "filename": fields.filename,
                         "url": f"/files/{fields.filename}",
                         "written": result.written,
                     },
                 )
-            return self._send_text(result.status, result.detail or str(result.status))
+            return self._send_post_response(result.status, text=result.detail or str(result.status))
 
-        def _content_length_or_zero(self) -> int:
+        def _content_length_strict(self) -> int | None:
+            """Parse ``Content-Length``; ``None`` if missing/invalid.
+
+            v0.8.0 requires Content-Length on POST (411 Length Required
+            when absent). The alternative — read-until-EOF — would
+            block on a keep-alive client that doesn't half-close.
+            """
             raw = self.headers.get("Content-Length", "")
+            if not raw:
+                return None
             try:
-                return max(int(raw), 0)
+                value = int(raw)
             except ValueError:
-                return 0
+                return None
+            if value < 0:
+                return None
+            return value
+
+        def _read_body(self, length: int) -> bytes:
+            """Counted read with a hard cap.
+
+            Loops on ``rfile.read`` rather than calling once: the
+            stdlib ``BufferedReader`` *should* return everything
+            requested, but the contract permits short reads on a
+            partial flush from the client. Counting bytes locally
+            defends against a lying ``Content-Length``: we never read
+            past the cap and never trust the header alone.
+
+            Raises :class:`_UploadReadError` on incomplete or
+            oversized reads — caller maps to a 400 / 413.
+            """
+            cap = min(length, max_upload_bytes)
+            chunks: list[bytes] = []
+            remaining = cap
+            while remaining > 0:
+                try:
+                    # 64 KiB chunk — small enough to bound memory growth
+                    # on a slow client, large enough that wheel-sized
+                    # uploads finish in a handful of iterations.
+                    chunk = self.rfile.read(min(65536, remaining))
+                except OSError as err:
+                    raise _UploadReadError(400, f"read error: {err}") from err
+                if not chunk:
+                    # Client closed before delivering Content-Length
+                    # bytes — legitimate truncation; reject as 400.
+                    raise _UploadReadError(
+                        400,
+                        f"incomplete body (got {cap - remaining} of {length} bytes)",
+                    )
+                chunks.append(chunk)
+                remaining -= len(chunk)
+            return b"".join(chunks)
 
     return _Handler

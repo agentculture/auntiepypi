@@ -127,14 +127,16 @@ def test_insecure_skip_verify_default_off(monkeypatch):
 
 
 def test_insecure_skip_verify_recognises_truthy(monkeypatch):
-    monkeypatch.setenv("AUNTIE_INSECURE_SKIP_VERIFY", "1")
-    assert insecure_skip_verify_enabled() is True
-    monkeypatch.setenv("AUNTIE_INSECURE_SKIP_VERIFY", "yes")
-    assert insecure_skip_verify_enabled() is True
+    for truthy in ("1", "true", "TRUE", "True", "yes", "YES", "on", "ON", "  yes  "):
+        monkeypatch.setenv("AUNTIE_INSECURE_SKIP_VERIFY", truthy)
+        assert insecure_skip_verify_enabled() is True, truthy
 
 
 def test_insecure_skip_verify_recognises_falsy(monkeypatch):
-    for falsy in ("", "0", "false", "False"):
+    """All non-allowlisted values (including FALSE/No/off/typos) leave
+    verification on. Defaulting to 'verify' is the safer side for a
+    security knob."""
+    for falsy in ("", "0", "false", "False", "FALSE", "no", "No", "off", "OFF", "anything"):
         monkeypatch.setenv("AUNTIE_INSECURE_SKIP_VERIFY", falsy)
         assert insecure_skip_verify_enabled() is False, falsy
 
@@ -345,9 +347,9 @@ def test_publish_verb_registered_in_main_parser():
     parser = _build_parser()
     # Smoke test — ensure `publish` parses without error.
     with mock.patch.object(publish_cmd, "cmd_publish", return_value=0):
-        args = parser.parse_args(["publish", "/tmp/x.whl"])  # noqa: S108
+        args = parser.parse_args(["publish", "/tmp/x.whl"])  # noqa: S108  # NOSONAR python:S5443
         assert args.command == "publish"
-        assert args.path == Path("/tmp/x.whl")  # noqa: S108
+        assert args.path == Path("/tmp/x.whl")  # noqa: S108  # NOSONAR python:S5443
 
 
 # --------- coverage closeouts ---------

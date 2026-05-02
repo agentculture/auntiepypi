@@ -371,37 +371,6 @@ def _validate_publish_authz_dependency(
         )
 
 
-def _validate_publish_users_in_htpasswd(
-    htpasswd: Path | None, publish_users: tuple[str, ...]
-) -> None:
-    """Cross-check: every publish_users entry must exist in htpasswd.
-
-    Runs at config-load when both are present; the goal is to catch
-    typos and stale rotations before the server starts. We tolerate a
-    missing/unreadable htpasswd file at config-load time (the strategy
-    will surface a clearer error at start-time) — only run the
-    membership check when the file actually parses.
-    """
-    if not publish_users or htpasswd is None:
-        return
-    # Delayed import: parse_htpasswd lives in _server, _detect mustn't
-    # take a hard dep on it for the lenient detection paths.
-    from auntiepypi._server._auth import HtpasswdError, parse_htpasswd
-
-    try:
-        table = parse_htpasswd(htpasswd)
-    except (OSError, HtpasswdError):
-        # Fall through — the strategy will report it at start-time.
-        return
-    missing = [name for name in publish_users if name not in table]
-    if missing:
-        raise ServerConfigError(
-            f"[tool.auntiepypi.local] publish_users contains name(s) not in "
-            f"{htpasswd}: {missing}. Either remove from publish_users or re-add "
-            "to htpasswd."
-        )
-
-
 def _validate_local_lift_rule(
     host: str,
     cert: Path | None,
@@ -502,10 +471,12 @@ def load_local_config(start: Path | None = None) -> LocalConfig:
         htpasswd=kwargs.get("htpasswd"),
         publish_users=kwargs.get("publish_users", ()),
     )
-    _validate_publish_users_in_htpasswd(
-        htpasswd=kwargs.get("htpasswd"),
-        publish_users=kwargs.get("publish_users", ()),
-    )
+    # Note: the cross-check that publish_users entries actually exist
+    # in the htpasswd file lives in _server (it requires reading the
+    # credential file, which detection paths must never do). The
+    # server-start path calls
+    # ``auntiepypi._server._auth.assert_publish_users_in_htpasswd``
+    # before binding.
     return LocalConfig(**kwargs)
 
 

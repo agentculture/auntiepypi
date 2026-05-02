@@ -66,19 +66,27 @@ def test_write_upload_handles_binary_content(tmp_path: Path):
 
 
 def test_write_upload_returns_500_on_oserror_with_cleanup(tmp_path: Path, monkeypatch):
-    """Simulate ENOSPC during rename — must return 500 and unlink temp."""
-    real_rename = os.rename
+    """Simulate ENOSPC during commit — must return 500 and unlink temp."""
+    real_link = os.link
 
-    def fake_rename(src, dst):
+    def fake_link(src, dst):
         raise OSError(28, "No space left on device")
 
-    monkeypatch.setattr(os, "rename", fake_rename)
+    monkeypatch.setattr(os, "link", fake_link)
     result = write_upload(tmp_path, "demo-1.0-py3-none-any.whl", b"contents")
     assert result.status == 500
     assert "No space left" in result.detail
-    monkeypatch.setattr(os, "rename", real_rename)
+    monkeypatch.setattr(os, "link", real_link)
     assert list(tmp_path.glob(".upload-*")) == []
     assert not (tmp_path / "demo-1.0-py3-none-any.whl").exists()
+
+
+def test_write_upload_returns_500_on_bad_root(tmp_path: Path):
+    """A non-existent root → temp create fails → 500, not unhandled traceback."""
+    bad_root = tmp_path / "does-not-exist"
+    result = write_upload(bad_root, "demo-1.0-py3-none-any.whl", b"contents")
+    assert result.status == 500
+    assert result.detail  # populated with the OSError detail
 
 
 def test_write_upload_concurrent_writers_first_wins(tmp_path: Path):
@@ -95,15 +103,36 @@ def test_write_upload_temp_file_uses_hidden_prefix(tmp_path: Path):
     """Temp file is hidden (.upload-…) so PEP 503 listing scanner skips it."""
     captured: dict[str, str] = {}
 
-    def fake_rename(src, dst):
+    def fake_link(src, dst):
         captured["src"] = str(src)
-        raise OSError("simulated rename failure")
+        raise OSError("simulated link failure")
 
-    with mock.patch("os.rename", fake_rename):
+    with mock.patch("os.link", fake_link):
         write_upload(tmp_path, "demo-1.0-py3-none-any.whl", b"x")
 
     assert "/.upload-" in captured["src"]
     assert captured["src"].endswith(".part")
+
+
+def test_write_upload_concurrent_collision_raises_filename_exists(tmp_path: Path):
+    """Even if a competing writer materialises the target *between* the
+    temp-write and the link commit, os.link's atomic no-clobber
+    behaviour means we get 409 — never an overwrite. Simulated by
+    pre-creating the target right before the commit step."""
+    target = tmp_path / "demo-1.0-py3-none-any.whl"
+    real_link = os.link
+
+    def racing_link(src, dst):
+        # Simulate a competitor winning the race: target appears
+        # between our temp-write and our link.
+        Path(dst).write_bytes(b"competitor")
+        return real_link(src, dst)
+
+    with mock.patch("os.link", racing_link):
+        result = write_upload(tmp_path, "demo-1.0-py3-none-any.whl", b"ours")
+    assert result.status == 409
+    # The competitor's bytes win; ours never get written.
+    assert target.read_bytes() == b"competitor"
 
 
 # --------- end-to-end POST handler ---------
@@ -397,3 +426,121 @@ def test_uploaded_file_downloadable_after_publish(served_publish_ready):
     finally:
         conn.close()
     assert downloaded == payload
+
+
+# --------- v0.8.0 round-1 hardening: Content-Length + Connection: close ---------
+
+
+def test_post_requires_content_length_returns_411(tmp_path: Path):
+    """Without a Content-Length header on POST, return 411 — never block
+    in read-until-EOF on a keep-alive client.
+    """
+    htpasswd_map = {"alice": _bcrypt_hash("secret")}
+    handler_cls = make_handler(
+        tmp_path,
+        htpasswd_map=htpasswd_map,
+        publish_users=("alice",),
+    )
+    httpd = ThreadingHTTPServer(("127.0.0.1", 0), handler_cls)
+    port = httpd.server_address[1]
+    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    thread.start()
+    try:
+        # Hand-rolled HTTP/1.0 POST with no Content-Length. http.client
+        # would auto-add one; we send raw bytes to bypass.
+        import socket as _socket
+
+        s = _socket.create_connection(("127.0.0.1", port), timeout=5)
+        try:
+            req = (
+                b"POST / HTTP/1.0\r\n"
+                b"Host: 127.0.0.1\r\n"
+                b"Authorization: " + _basic_header("alice", "secret").encode() + b"\r\n"
+                b"Content-Type: multipart/form-data; boundary=x\r\n"
+                b"\r\n"
+            )
+            s.sendall(req)
+            resp = s.recv(8192)
+        finally:
+            s.close()
+        # First line: HTTP/1.0 411 Length Required
+        assert b"411" in resp.split(b"\r\n", 1)[0]
+        assert b"Length" in resp
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+        thread.join(timeout=2)
+
+
+def test_post_error_response_includes_connection_close(served_publish_ready):
+    """Every non-2xx POST response sends Connection: close so leftover
+    body bytes can't desync subsequent requests on a kept-alive socket.
+    """
+    port, _ = served_publish_ready
+    body, ctype = _twine_body(project="otherpkg")  # mismatch → 400
+    auth = _basic_header("alice", "secret")
+    status, _, headers = _post(port, "/", body, _content_headers(body, ctype, auth))
+    assert status == 400
+    assert headers.get("Connection", "").lower() == "close"
+
+
+def test_post_success_response_includes_connection_close(served_publish_ready):
+    """Even on 201 we close — the upload is complete and the client
+    typically isn't reusing the socket. Eliminates a class of subtle
+    desync bugs at minimal cost."""
+    port, _ = served_publish_ready
+    body, ctype = _twine_body()
+    auth = _basic_header("alice", "secret")
+    status, _, headers = _post(port, "/", body, _content_headers(body, ctype, auth))
+    assert status == 201
+    assert headers.get("Connection", "").lower() == "close"
+
+
+def test_post_truncated_body_returns_400(tmp_path: Path):
+    """Client claims Content-Length=999 but only sends 100 bytes →
+    counted-read loop catches the truncation and returns 400, not
+    block forever.
+    """
+    htpasswd_map = {"alice": _bcrypt_hash("secret")}
+    handler_cls = make_handler(
+        tmp_path,
+        htpasswd_map=htpasswd_map,
+        publish_users=("alice",),
+    )
+    httpd = ThreadingHTTPServer(("127.0.0.1", 0), handler_cls)
+    port = httpd.server_address[1]
+    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    thread.start()
+    try:
+        import socket as _socket
+
+        s = _socket.create_connection(("127.0.0.1", port), timeout=5)
+        try:
+            short_body = b"X" * 50
+            req = (
+                b"POST / HTTP/1.0\r\n"
+                b"Host: 127.0.0.1\r\n"
+                b"Authorization: " + _basic_header("alice", "secret").encode() + b"\r\n"
+                b"Content-Type: multipart/form-data; boundary=x\r\n"
+                b"Content-Length: 9999\r\n"
+                b"\r\n"
+            ) + short_body
+            s.sendall(req)
+            # Half-close the write side so server's read loop sees EOF
+            # rather than blocking.
+            s.shutdown(_socket.SHUT_WR)
+            resp = b""
+            while True:
+                chunk = s.recv(4096)
+                if not chunk:
+                    break
+                resp += chunk
+        finally:
+            s.close()
+        # Status line begins HTTP/1.0 400 …
+        assert b"400" in resp.split(b"\r\n", 1)[0]
+        assert b"incomplete body" in resp
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+        thread.join(timeout=2)

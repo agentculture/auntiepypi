@@ -623,14 +623,21 @@ def test_load_local_config_rejects_publish_users_without_htpasswd(tmp_path):
         load_local_config(tmp_path)
 
 
-def test_load_local_config_rejects_publish_user_not_in_htpasswd(tmp_path, monkeypatch):
-    """Cross-validator catches a publish_users name that isn't an htpasswd entry."""
+def test_load_local_config_does_not_read_htpasswd(tmp_path, monkeypatch):
+    """``load_local_config`` MUST NOT parse the htpasswd file.
+
+    Detection paths call ``load_local_config`` to discover host/port —
+    teaching the loader to read credential stores would leak that
+    parsing into every probe. The publish_users / htpasswd
+    cross-check moved to the server-start path
+    (``_actions.auntie._verify_tls_auth_paths`` and
+    ``_server.__main__.main``) precisely because of this rule.
+    """
     monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
     htp = tmp_path / "htpasswd"
     import bcrypt
 
     h = bcrypt.hashpw(b"pw", bcrypt.gensalt(rounds=4))  # noqa: S106
-    # Only alice in htpasswd, but publish_users names eve.
     htp.write_bytes(b"alice:" + h + b"\n")
     _write_pyproject(
         tmp_path,
@@ -640,16 +647,14 @@ def test_load_local_config_rejects_publish_user_not_in_htpasswd(tmp_path, monkey
         publish_users = ["alice", "eve"]
         """,
     )
-    with pytest.raises(ServerConfigError, match=r"publish_users contains name.*'eve'"):
-        load_local_config(tmp_path)
+    # Must NOT raise — the cross-check is server-start scope, not load.
+    # 'eve' isn't in htpasswd, but that's caught later, not here.
+    cfg = load_local_config(tmp_path)
+    assert cfg.publish_users == ("alice", "eve")
 
 
-def test_load_local_config_publish_users_membership_skipped_when_htpasswd_missing(
-    tmp_path, monkeypatch
-):
-    """If htpasswd file doesn't exist, the membership check skips silently —
-    the strategy will surface a clearer 'cannot read htpasswd' error at
-    server-start time."""
+def test_load_local_config_publish_users_no_htpasswd_read_when_file_missing(tmp_path, monkeypatch):
+    """Even with a missing htpasswd path, load_local_config doesn't try to read it."""
     monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
     htp = tmp_path / "missing.htpasswd"  # never created
     _write_pyproject(

@@ -30,7 +30,11 @@ from pathlib import Path
 from typing import Sequence
 
 from auntiepypi._server import serve
-from auntiepypi._server._auth import parse_htpasswd
+from auntiepypi._server._auth import (
+    PublishAuthzError,
+    assert_publish_users_in_htpasswd,
+    parse_htpasswd,
+)
 from auntiepypi._server._config import _DEFAULT_MAX_UPLOAD_BYTES
 from auntiepypi._server._tls import build_ssl_context
 
@@ -107,13 +111,22 @@ def main(argv: Sequence[str] | None = None) -> None:
     if args.htpasswd is not None:
         htpasswd_map = parse_htpasswd(args.htpasswd)
 
+    publish_users = tuple(args.publish_user)
+    # Cross-check publish_users against htpasswd here, at the
+    # server-start boundary. Detection paths never run this.
+    try:
+        assert_publish_users_in_htpasswd(args.htpasswd, publish_users)
+    except PublishAuthzError as err:
+        print(str(err), file=sys.stderr)
+        raise SystemExit(2) from err
+
     serve(
         args.host,
         args.port,
         args.root,
         ssl_context=ssl_context,
         htpasswd_map=htpasswd_map,
-        publish_users=tuple(args.publish_user),
+        publish_users=publish_users,
         max_upload_bytes=args.max_upload_bytes,
     )
 

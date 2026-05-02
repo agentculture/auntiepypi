@@ -11,9 +11,15 @@ from __future__ import annotations
 import base64
 
 import bcrypt
+import pytest
 
 from auntiepypi._server import _auth
-from auntiepypi._server._auth import authenticate_user, verify_basic
+from auntiepypi._server._auth import (
+    PublishAuthzError,
+    assert_publish_users_in_htpasswd,
+    authenticate_user,
+    verify_basic,
+)
 
 
 def _bcrypt_hash(password: str) -> bytes:
@@ -150,3 +156,51 @@ def test_verify_basic_consistent_with_authenticate_user(monkeypatch):
 
 def test_authenticate_user_in_module_all():
     assert "authenticate_user" in _auth.__all__
+
+
+# --------- v0.8.0 publish-users / htpasswd cross-check ---------
+
+
+def _write_htpasswd(path, users):
+    """Write a tiny bcrypt-hashed htpasswd with the given user list."""
+    lines = []
+    for user in users:
+        h = bcrypt.hashpw(b"pw", bcrypt.gensalt(rounds=4))  # noqa: S106
+        lines.append(user.encode() + b":" + h)
+    path.write_bytes(b"\n".join(lines) + b"\n")
+
+
+def test_assert_publish_users_in_htpasswd_passes_for_complete_set(tmp_path):
+    htp = tmp_path / "htp"
+    _write_htpasswd(htp, ["alice", "bob"])
+    # No raise.
+    assert_publish_users_in_htpasswd(htp, ("alice", "bob"))
+
+
+def test_assert_publish_users_in_htpasswd_raises_on_missing_user(tmp_path):
+    htp = tmp_path / "htp"
+    _write_htpasswd(htp, ["alice"])
+    with pytest.raises(PublishAuthzError, match=r"'eve'"):
+        assert_publish_users_in_htpasswd(htp, ("alice", "eve"))
+
+
+def test_assert_publish_users_in_htpasswd_noop_when_publish_users_empty(tmp_path):
+    htp = tmp_path / "htp"
+    _write_htpasswd(htp, ["alice"])
+    # Empty → no read, no raise.
+    assert_publish_users_in_htpasswd(htp, ())
+
+
+def test_assert_publish_users_in_htpasswd_noop_when_htpasswd_none(tmp_path):
+    """Caller's existence check (``_verify_tls_auth_paths``) handles
+    the htpasswd-unset case before we get here."""
+    assert_publish_users_in_htpasswd(None, ("alice",))
+
+
+def test_assert_publish_users_in_htpasswd_silent_when_htpasswd_unreadable(tmp_path):
+    """A missing file produces a clearer error from the readability
+    pre-check; this helper falls through silently rather than
+    double-reporting."""
+    missing = tmp_path / "no-such.htpasswd"
+    # No raise.
+    assert_publish_users_in_htpasswd(missing, ("alice",))

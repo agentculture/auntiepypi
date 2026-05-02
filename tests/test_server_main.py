@@ -151,7 +151,7 @@ def test_parser_publish_user_repeatable():
     args = server_main._parser().parse_args(
         [
             "--root",
-            "/tmp/wh",  # noqa: S108
+            "/tmp/wh",  # noqa: S108  # NOSONAR python:S5443
             "--publish-user",
             "alice",
             "--publish-user",
@@ -162,18 +162,23 @@ def test_parser_publish_user_repeatable():
 
 
 def test_parser_publish_user_default_is_empty_list():
-    args = server_main._parser().parse_args(["--root", "/tmp/wh"])  # noqa: S108
+    args = server_main._parser().parse_args(
+        ["--root", "/tmp/wh"]  # noqa: S108  # NOSONAR python:S5443
+    )
     assert args.publish_user == []
 
 
 def test_parser_max_upload_bytes_default():
-    args = server_main._parser().parse_args(["--root", "/tmp/wh"])  # noqa: S108
+    args = server_main._parser().parse_args(
+        ["--root", "/tmp/wh"]  # noqa: S108  # NOSONAR python:S5443
+    )
     assert args.max_upload_bytes == 100 * 1024 * 1024
 
 
 def test_parser_max_upload_bytes_override():
+    fixture_root = "/tmp/wh"  # noqa: S108  # NOSONAR python:S5443
     args = server_main._parser().parse_args(
-        ["--root", "/tmp/wh", "--max-upload-bytes", "536870912"]  # noqa: S108
+        ["--root", fixture_root, "--max-upload-bytes", "536870912"]
     )
     assert args.max_upload_bytes == 536870912
 
