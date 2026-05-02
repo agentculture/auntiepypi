@@ -3,27 +3,53 @@
 > auntie (Python distribution: `auntiepypi`) is both a CLI and an agent
 > that maintains, uses, and serves the CLI for managing PyPI packages.
 > It overviews packages on pypi.org, detects PyPI-flavored servers
-> running locally, and starts/stops/restarts declared servers —
-> informational first, actionable on demand.
+> running locally, starts/stops/restarts declared servers, and hosts a
+> first-party PEP 503 simple-index — informational first, actionable
+> on demand.
 
-**Status:** v0.8.0 — `auntie publish` (write side) landed. The
-first-party server now accepts twine-compatible POST uploads at `/`
-(legacy PyPI upload protocol — `multipart/form-data` with
-`:action=file_upload`). Authorization is gated by both v0.7.0 auth
-AND a new `publish_users` allowlist; empty allowlist preserves
-read-only mode. New CLI verb `auntie publish <path>` reads creds from
-`$AUNTIE_PUBLISH_USER` / `$AUNTIE_PUBLISH_PASSWORD` or interactive
-prompt. Per-request body cap via `[tool.auntiepypi.local].max_upload_bytes`
-(default 100 MiB). No new runtime dep.
+## What auntie is
 
-Bare `auntie up` / `auntie down` / `auntie restart` (introduced in
-v0.6.0) continue to start, stop, and restart auntie's own simple-index
-server. Wheels in `$XDG_DATA_HOME/auntiepypi/wheels/` are served from
-`http://127.0.0.1:3141/simple/` (or `https://...` when TLS is
-configured) and installable via `pip install --index-url`. Lifecycle
-verbs continue to work against declared servers (`managed_by ∈
-{systemd-user, command}`); `--all` aggregates the first-party server
-with every supervised declaration.
+A small CLI plus a stable plumbing layer that an agent inside the
+AgentCulture mesh can call. Read verbs (`overview`, `learn`,
+`explain`, `whoami`, `doctor` without `--apply`) read configuration
+and probe state but never write to disk or bind a port. Mutation
+verbs (`doctor --apply`, `up`, `down`, `restart`, `publish`) do
+exactly one thing each, and every dangerous surface (public binding,
+POST upload, config edits) requires explicit operator opt-in. The first-party
+server runs on loopback by default and stays read-only until
+`publish_users` is set. See [`docs/architecture.md`](docs/architecture.md)
+for the module map and [`docs/security.md`](docs/security.md) for the
+threat model.
+
+## Status
+
+| Version | Capability                                       | Mutates           | Status   |
+|---------|--------------------------------------------------|-------------------|----------|
+| v0.0.1  | Package skeleton (`learn`, `explain`, `whoami`)  | nothing           | shipped  |
+| v0.1.0  | `auntie overview` packages dashboard             | nothing           | shipped  |
+| v0.3.0  | `auntie overview` server detection (`_detect/`)  | nothing           | shipped  |
+| v0.4.0  | `auntie doctor` lifecycle (`--apply`)            | `pyproject.toml`  | shipped  |
+| v0.5.0  | `auntie up` / `down` / `restart` (declared)      | process state     | shipped  |
+| v0.6.0  | First-party PEP 503 simple-index (read-only)     | nothing           | shipped  |
+| v0.7.0  | HTTPS + Basic auth on the first-party server     | nothing           | shipped  |
+| v0.8.0  | `auntie publish` — twine-compatible POST upload  | package index     | shipped  |
+| v0.8.x  | Keyring / netrc credential plumbing              | nothing           | planned  |
+| v0.9.0  | Streaming multipart (multi-GiB ML wheels)        | package index     | planned  |
+| v1.0.0  | Mesh-aware: Culture-mesh service-registry discovery | nothing        | planned  |
+
+Roadmap is descriptive of intent, not a commitment.
+
+## Docs
+
+- [`docs/about.md`](docs/about.md) — non-technical explainer.
+- [`docs/architecture.md`](docs/architecture.md) — module map, state
+  surfaces, read-only vs write-capable verbs.
+- [`docs/security.md`](docs/security.md) — defaults, public-binding
+  rules, publish authorization, body cap, file permissions.
+- [`docs/comparison.md`](docs/comparison.md) — when to pick auntie vs
+  pypiserver / devpi / twine.
+- [`docs/superpowers/specs/`](docs/superpowers/specs/) — per-milestone
+  design docs (decisions and rationale).
 
 ## Quick start
 

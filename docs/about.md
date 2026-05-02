@@ -12,9 +12,9 @@ inside the AgentCulture mesh can call. The tool reads. It reports. It
 does not block builds, fail CI on package-quality grounds, or insist on
 its own opinions of "good enough".
 
-## What it does today (v0.4.0)
+## What it does today (v0.8.0)
 
-Three things:
+Five things:
 
 1. **Dashboard.** Run `auntie overview` and you get a
    one-row-per-package summary of every package listed in your repo's
@@ -38,6 +38,23 @@ Three things:
    config fields. We never invent config values; ambiguous cases (e.g.
    duplicate names) are deferred to a `--decide` re-run.
 
+4. **Lifecycle.** `auntie up` / `auntie down` / `auntie restart`
+   start, stop, and restart servers. Bare invocation targets auntie's
+   own first-party PEP 503 simple-index server (loopback only by
+   default; HTTPS + Basic auth required for public binding). A named
+   target acts on one declared `[[tool.auntiepypi.servers]]` entry;
+   `--all` aggregates the first-party server with every supervised
+   declaration.
+
+5. **Publish.** `auntie publish <path>` uploads a wheel or sdist to
+   the configured first-party index using the legacy PyPI POST upload
+   protocol (twine-compatible). Authorization is a strict superset of
+   authentication: every publisher must be both authenticated AND in
+   the `publish_users` allowlist. With no `htpasswd` configured, the
+   server is read-only (POST → 405). With auth configured but
+   `publish_users` empty, authenticated POSTs return 403
+   "publish disabled" — read-only mode is preserved either way.
+
 The same machinery feeds the top-level `auntie overview`, which
 composes the packages dashboard with a `servers` section that surfaces
 declared servers, default-port finds, and (with `--proc`) /proc-walked
@@ -56,38 +73,45 @@ This is a deliberate choice. Tools that gate on opinion-shaped metrics
 get worked around. Tools that report on opinion-shaped metrics stay
 useful.
 
-## v0.3.0 — detect, don't supervise
+## How we got here
 
-`auntie overview` now sees more than just the canonical-port devpi /
-pypiserver instances: it reads `[[tool.auntiepypi.servers]]` from
-`pyproject.toml`, fingerprints anything running on port 3141 / 8080,
-and (with `--proc`) walks `/proc` for matching processes. The CLI
-binary is `auntie` (`auntiepypi` stays as an alias for muscle memory).
-
-It deliberately stopped at *seeing*. Lifecycle — start, stop — landed
-in v0.4.0.
-
-## v0.4.0 — doctor acts
-
-Doctor diagnoses what's wrong, explains how to fix it, and (with
-`--apply`) acts. The acts are narrow: spawn declared servers via their
-`managed_by` strategy (`systemd-user` or `command`), or delete
-half-supervised declarations that are missing required fields. We never
-invent config values; ambiguous cases are deferred to a `--decide`
-re-run. Before any `pyproject.toml` edit, a numbered `.bak` snapshot
-is written so you can roll back with a single `mv` command.
-
-The `--fix` flag from earlier versions is replaced by `--apply`. The
-`packages` noun (`auntie packages overview`) is removed — use
-`auntie overview <PKG>` instead.
+- **v0.3.0 — detect, don't supervise.** `auntie overview` learned to
+  read `[[tool.auntiepypi.servers]]`, fingerprint default-port devpi
+  / pypiserver, and (with `--proc`) walk `/proc`. The CLI binary
+  became `auntie`; `auntiepypi` stayed as an alias.
+- **v0.4.0 — doctor acts.** Diagnosis + `--apply` to dispatch
+  declared servers and delete half-supervised entries. Numbered
+  `.bak` snapshots before any `pyproject.toml` edit.
+- **v0.5.0 — lifecycle verbs.** `auntie up` / `auntie down` /
+  `auntie restart` against declared servers. PID-file + sidecar
+  tracking; argv-matched port-walk fallback when no PID file exists.
+- **v0.6.0 — first-party server.** Read-only PEP 503 simple-index
+  for mesh-private use; bare `auntie up` / `down` / `restart` start
+  and stop it. Loopback-only binding.
+- **v0.7.0 — HTTPS + Basic auth.** Operator-supplied PEM cert and
+  htpasswd (bcrypt-only). Public binding allowed only when both are
+  configured; either alone rejected at config-load time. `bcrypt`
+  becomes the first runtime dependency.
+- **v0.8.0 — `auntie publish` (write side).** Twine-compatible POST
+  upload at `/`, gated by v0.7.0 auth plus a `publish_users`
+  allowlist (cross-checked against htpasswd at config-load).
+  Per-request body cap via `max_upload_bytes` (default 100 MiB).
+  No new runtime dep — `email.parser.BytesParser` parses the
+  multipart body.
 
 ## Where it's headed
 
-- v0.5.0 — own server + lifecycle commands. `auntie up` / `auntie down`
-  / `auntie restart`; PID-file tracking; first-party PEP 503
-  simple-index for mesh-private use.
-- Later — release orchestration (trigger sibling `publish.yml`
-  workflows); additional detectors as needed; whatever the mesh needs next.
+- **v0.8.x — keyring / netrc.** Credential plumbing for
+  `auntie publish`: read username/password from system keyring or a
+  netrc-format file. Reduces the `$AUNTIE_PUBLISH_*` env-var
+  ergonomics gap.
+- **v0.9.0 — streaming multipart.** Replace the v0.8.0 in-memory
+  parser with a streaming variant so multi-GiB ML wheels don't pay
+  the memory cost. Same on-the-wire protocol.
+- **v1.0.0 — mesh-aware.** Local index discoverable via Culture-mesh
+  service registry; trust boundary documented. Per-package ownership
+  maps likely land here too.
 
 Nothing here gets shipped without a brainstorm pass and a written spec
-under `docs/superpowers/specs/`. The roadmap is a sketch, not a plan.
+under `docs/superpowers/specs/`. The roadmap is descriptive of intent,
+not a commitment — reorder or replace as the design lands.
